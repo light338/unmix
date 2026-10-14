@@ -1,0 +1,36 @@
+name: First-use report
+description: Report an actual attempt to remove a recorded decision in your project.
+title: "[First use] "
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Project and removed decision
+      description: Describe the project, recorded task count, removed decision, and functions to retain. A public repository link is optional.
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Outcome
+      options:
+        - Candidate worked and retained the intended behavior
+        - Candidate needed manual fixes after Codex adaptation
+        - Reconstruction failed
+        - Could not finish setup
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Checks and manual review
+      description: What did you actually run or inspect? Include failed retained behavior and the improvement that would matter most. Remove secrets and private source.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, Node.js, Git and Codex versions
+    validations:
+      required: true

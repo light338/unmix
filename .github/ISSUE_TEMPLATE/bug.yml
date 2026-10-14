@@ -1,0 +1,25 @@
+name: Bug report
+description: A reproducible failure in setup, snapshots, replay or verification.
+title: "[Bug] "
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps and expected behavior
+      description: Give a small reproduction using nonconfidential files and exact commands.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the error and whether the original project was affected. Remove secrets.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, Node.js, Git and Codex versions
+    validations:
+      required: true
