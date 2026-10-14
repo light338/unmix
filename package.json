@@ -1,0 +1,17 @@
+{
+  "name": "unmix-codex-prototype",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Task-aware reconstruction of Git projects for Codex, with evidence and behavioral checks",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "bin": { "unmix": "bin/unmix.mjs" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "demo": "node examples/demo.mjs",
+    "demo:live": "node examples/live-codex.mjs",
+    "check": "node --check src/core.mjs && node --check src/mcp.mjs && node --check bin/unmix.mjs && node --check examples/live-codex.mjs && node --check examples/live/fixture.mjs && node --check examples/live/audit.mjs && node --check examples/live/mcp-observer.mjs"
+  },
+  "files": ["bin", "src", "docs", "examples", "test", "README.md", "LICENSE"]
+}
