@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import {spawn} from 'node:child_process';
+import readline from 'node:readline';
+const [bin,repo,log] = process.argv.slice(2);
+const child = spawn(process.execPath,[bin,'mcp','--repo',repo],{stdio:['pipe','pipe','inherit']});
+const record = (direction,line) => fs.appendFileSync(log,JSON.stringify({at:new Date().toISOString(),direction,message:JSON.parse(line)})+'\n');
+readline.createInterface({input:process.stdin}).on('line', line=>{record('request',line);child.stdin.write(line+'\n');});
+readline.createInterface({input:child.stdout}).on('line', line=>{record('response',line);process.stdout.write(line+'\n');});
+process.stdin.on('end',()=>child.stdin.end());
+child.on('exit',code=>process.exit(code??1));
