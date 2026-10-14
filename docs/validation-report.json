@@ -1,0 +1,119 @@
+{
+  "liveCodexInvocation": true,
+  "originalUnchanged": true,
+  "retainedTestsUnchanged": true,
+  "oracleUnchanged": true,
+  "planId": "plan-96ae373c",
+  "candidate": "<EVIDENCE_ROOT>/notebook-plan-96ae373c",
+  "removed": [
+    "identity"
+  ],
+  "adaptations": [
+    {
+      "taskId": "tags",
+      "note": "Adapted tags dependency: addNote permits guests without any author key and retains author.name only when explicitly supplied as a string. tagNote and its test remain intact."
+    },
+    {
+      "taskId": "normalization",
+      "note": "Resolved normalization conflict by applying original trim and CRLF-to-LF transformation to guest/optional-author addNote; retained normalization tests unchanged."
+    },
+    {
+      "taskId": "export",
+      "note": "Adapted export to include author only for string legacy metadata, omitting it completely for guests; preserved export tests verbatim. Added removal regression tests for absent createAuthor, guest normalization/tagging/export and mixed guest/legacy compatibility."
+    }
+  ],
+  "verification": {
+    "passed": true,
+    "tree": "08a8aac845021da3ce6c5f05d876fce9407637ce",
+    "changedDuringChecks": false,
+    "results": [
+      {
+        "command": [
+          "node",
+          "--test",
+          "tags.test.mjs"
+        ],
+        "ok": true,
+        "code": 0,
+        "stdout": "✔ tags the selected note with sorted unique tags and preserves fields (1.252042ms)\n✔ replaces existing tags and accepts an empty tag list (0.07625ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 35.555125\n",
+        "stderr": "",
+        "error": null
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "normalization.test.mjs"
+        ],
+        "ok": true,
+        "code": 0,
+        "stdout": "✔ trims surrounding whitespace and converts every CRLF to LF (0.308458ms)\n✔ preserves Unicode and internal whitespace (0.05575ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 33.157875\n",
+        "stderr": "",
+        "error": null
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "export.test.mjs"
+        ],
+        "ok": true,
+        "code": 0,
+        "stdout": "✔ text and sorted tags survive deterministic JSON export (0.841875ms)\n✔ missing tags export as an empty array and note order is preserved (0.095583ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 33.708667\n",
+        "stderr": "",
+        "error": null
+      },
+      {
+        "command": [
+          "node",
+          "<EVIDENCE_ROOT>/oracle.mjs"
+        ],
+        "ok": true,
+        "code": 0,
+        "stdout": "Independent removal and retained-behavior oracle passed\n",
+        "stderr": "",
+        "error": null
+      },
+      {
+        "command": [
+          "node",
+          "--test",
+          "removal.test.mjs"
+        ],
+        "ok": true,
+        "code": 0,
+        "stdout": "✔ identity factory is removed and guest notes have no author metadata (0.6615ms)\n✔ explicit legacy author survives tagging and export beside guest notes (0.086083ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 32.921083\n",
+        "stderr": "",
+        "error": null
+      }
+    ],
+    "at": "2026-10-14T10:29:40.989Z",
+    "scope": "Configured checks only; this is not proof of all behavior."
+  },
+  "independentOracle": {
+    "ok": true,
+    "code": 0,
+    "stdout": "Independent removal and retained-behavior oracle passed\n",
+    "stderr": "",
+    "error": null
+  },
+  "allCandidateTests": {
+    "ok": true,
+    "code": 0,
+    "stdout": "✔ text and sorted tags survive deterministic JSON export (0.643792ms)\n✔ missing tags export as an empty array and note order is preserved (0.099208ms)\n✔ trims surrounding whitespace and converts every CRLF to LF (0.329167ms)\n✔ preserves Unicode and internal whitespace (0.061375ms)\n✔ identity factory is removed and guest notes have no author metadata (0.754833ms)\n✔ explicit legacy author survives tagging and export beside guest notes (0.093084ms)\n✔ tags the selected note with sorted unique tags and preserves fields (0.624125ms)\n✔ replaces existing tags and accepts an empty tag list (0.077167ms)\nℹ tests 8\nℹ suites 0\nℹ pass 8\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 43.1835\n",
+    "stderr": "",
+    "error": null
+  },
+  "mcpCallCount": 19,
+  "scope": "One synthetic notebook; agent-authored tasks and repairs. No claim of general semantic correctness.",
+  "release": "0.1.1",
+  "date": "2026-10-14",
+  "node": "v24.19.0",
+  "codex": "0.162.0-alpha.17.2",
+  "testsPassed": 14,
+  "liveServerVersion": "0.1.0",
+  "mcpTransport": "Real Codex stdio client",
+  "innerSandbox": "danger-full-access inside desktop executor filesystem sandbox",
+  "initialFailure": "Nested sandbox-exec: sandbox_apply: Operation not permitted",
+  "globalUserConfigModified": false
+}

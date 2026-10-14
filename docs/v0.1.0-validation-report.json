@@ -1,0 +1,40 @@
+{
+  "release": "0.1.0",
+  "node": "v24.19.0",
+  "testsPassed": 12,
+  "mcpTransport": "stdio JSON-RPC client integration test",
+  "liveCodexTested": false,
+  "demonstration": {
+    "original": "/workspace/scratch/43e91fb3eddf/unmix-demo/shop",
+    "candidate": "/workspace/scratch/43e91fb3eddf/unmix-demo/guest-shop",
+    "recordedTasks": 5,
+    "removed": [
+      "registration"
+    ],
+    "retained": [
+      "design",
+      "payment",
+      "rounding",
+      "receipt"
+    ],
+    "blocks": [
+      {
+        "taskId": "payment",
+        "kind": "removed_dependency"
+      },
+      {
+        "taskId": "rounding",
+        "kind": "patch_conflict"
+      },
+      {
+        "taskId": "receipt",
+        "kind": "patch_conflict"
+      }
+    ],
+    "passedChecks": 5,
+    "originalUnchanged": true,
+    "liveCodexInvocation": false,
+    "adaptation": "Authored demonstration through the same repair/resume interface used by Codex.",
+    "planId": "plan-10d890c8"
+  }
+}
