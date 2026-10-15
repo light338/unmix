@@ -79,6 +79,12 @@ Manual checks require a real observation and accurate attribution. Inspect
 Never invent a human test or refresh a result solely because automated checks
 pass. Recheck stale observations individually; see [manual checks](manual-checks.md).
 
+New plans also protect selected recorded test/config inputs. Use `protectedFiles`
+in `unmix_prepare` for custom repository-relative scripts and fixtures not found by
+the naming heuristic. Review `protectedInputs` in the report; do not edit the
+manifest or protected tests to turn a failure into a pass. See
+[protected inputs](protected-inputs.md) for legacy behavior and limits.
+
 ## Example user request to Codex
 
 "Use Unmix to remove the registration task. Keep checkout, dark design, receipt

@@ -63,10 +63,13 @@ Failed evidence is preserved for diagnosis; existing directories are never reuse
 ## Limits
 
 This proves one synthetic workflow, not reliable reconstruction of arbitrary
-repositories. The live auditor protects this experiment; the core `unmix_verify`
-still does not freeze arbitrary project test files. A regression test explicitly
-demonstrates that a weakened test can pass core verification and that the live
-auditor rejects it. The oracle is outside the candidate and hash-checked afterward,
+repositories. The live auditor protected this v0.1.1 experiment independently;
+that version's core verifier did not freeze project test files. From v0.1.5,
+new plans also protect selected recorded test/config inputs in the core (see
+[scope and limits](protected-inputs.md)). The regression fixture now checks that
+both core verification and the independent auditor reject a weakened retained
+test. This does not rerun or broaden the historical live experiment.
+The oracle is outside the candidate and hash-checked afterward,
 but not protected by a separate process-level read-only filesystem boundary.
 
 The downloadable evidence includes prompts, original notebook, candidate,

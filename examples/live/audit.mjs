@@ -20,11 +20,11 @@ export function audit(live,before) {
   const plans=Object.values(ledger.plans); assert.equal(plans.length,1);
   const p=app.inspect(plans[0].planId);
   assert.deepEqual(p.remove,['identity']);
-  assert.equal(p.status,'checks_passed'); assert.equal(p.verificationStale,false);
   assert.ok(p.tasks.some(t=>t.replay==='adapted'));
   for(const name of ['tags','normalization','export']) {
     assert.equal(hash(path.join(p.candidate,`${name}.test.mjs`)),before.original.files[`${name}.test.mjs`],`${name} tests were changed`);
   }
+  assert.equal(p.status,'checks_passed'); assert.equal(p.verificationStale,false);
   const oracle=run(p.candidate,process.execPath,[path.join(live,'oracle.mjs')]);
   assert.equal(oracle.ok,true,oracle.stderr);
   const regression=run(p.candidate,process.execPath,['--test']);

@@ -7,7 +7,7 @@ import {Unmix,run} from '../src/core.mjs';
 import {setupFixture} from '../examples/live/fixture.mjs';
 import {capture,audit} from '../examples/live/audit.mjs';
 
-test('live evidence audit rejects a passing candidate with weakened retained tests', t => {
+test('core verification and independent audit reject weakened retained tests', t => {
   // This is an auditor regression fixture, not evidence of a live model run.
   const live=fs.mkdtempSync(path.join(os.tmpdir(),'unmix-live-audit-'));
   t.after(()=>fs.rmSync(live,{recursive:true,force:true}));
@@ -22,7 +22,10 @@ test('live evidence audit rejects a passing candidate with weakened retained tes
   const plan=app.prepare({remove:['identity'],instruction:'Remove identity, retain checks'});
   app.resume({planId:plan.planId,note:'Regression fixture: no semantic repair needed for independent assertion files'});
   fs.writeFileSync(path.join(plan.candidate,'tags.test.mjs'),'// All assertions removed\n');
-  assert.equal(app.verify({planId:plan.planId}).passed,true);
+  const verification = app.verify({planId:plan.planId});
+  assert.equal(verification.passed,false);
+  assert.equal(verification.skipped,'protected_inputs_changed');
+  assert.equal(verification.results.length,0);
   assert.throws(()=>audit(live,before),/tags tests were changed/);
 });
 
