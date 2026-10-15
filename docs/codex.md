@@ -71,7 +71,13 @@ existing instructions. Unmix does not automatically modify agent configuration.
 | Continue after repair | `unmix_resume` | Adaptation snapshot and remaining replay |
 | Review by task before checks | `unmix_report` | Original/result patches, blocker history and pending work; JSON or Markdown |
 | Run behavioral checks | `unmix_verify` | Per-command results |
-| Review final state | `unmix_inspect` | Difference, status and stale-check flag |
+| Record an actual manual observation | `unmix_manual_check` | Caller-supplied result tied to the pre-check candidateTree; see [manual checks](manual-checks.md) |
+| Review final state | `unmix_inspect` | Candidate tree, difference, automated freshness and manual observations |
+
+Manual checks require a real observation and accurate attribution. Inspect
+`candidateTree` **before** the interaction and submit it as `expectedTree`.
+Never invent a human test or refresh a result solely because automated checks
+pass. Recheck stale observations individually; see [manual checks](manual-checks.md).
 
 ## Example user request to Codex
 
