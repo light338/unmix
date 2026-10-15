@@ -9,7 +9,8 @@ const tools = [
   ['unmix_begin', 'Record task intent before editing. Declare dependencies and checks for retained behavior.', schema({ taskId: string, title: string, intent: string, dependsOn: { type: 'array', items: string }, checks: commandList }, ['taskId', 'title', 'intent']), () => 'begin'],
   ['unmix_finish', 'Snapshot all nonignored file changes for the active task. Original branch and index stay unchanged.', schema({}), () => 'finish'],
   ['unmix_timeline', 'Read recorded tasks, dependency declarations, checks and snapshot commit IDs.', schema({}), () => 'timeline'],
-  ['unmix_prepare', 'Create a separate Git worktree omitting selected tasks. Replay retained patches; stop at conflicts or removed dependencies. Use unmix_report to review original/result patches by task before checks.', schema({ remove: { type: 'array', minItems: 1, items: string }, instruction: string, checks: commandList, protectedFiles: { type: 'array', maxItems: 256, items: string } }, ['remove', 'instruction']), () => 'prepare'],
+  ['unmix_preview', 'Preview a task removal using recorded dependencies, transitive paths and shared files. Read-only: no candidate, replay, checks or model call. Hidden dependencies and conflicts remain unknown. Return expectedTimeline for optional stale-preview refusal in prepare.', schema({ remove: { type: 'array', minItems: 1, items: string }, format: { ...string, enum: ['json', 'markdown'] } }, ['remove']), () => 'preview'],
+  ['unmix_prepare', 'Create a separate Git worktree omitting selected tasks. Replay retained patches; stop at conflicts or removed dependencies. Use unmix_report to review original/result patches by task before checks.', schema({ remove: { type: 'array', minItems: 1, items: string }, instruction: string, checks: commandList, protectedFiles: { type: 'array', maxItems: 256, items: string }, expectedTimeline: string }, ['remove', 'instruction']), () => 'prepare'],
   ['unmix_resume', 'After Codex repairs and stages conflicts in the candidate, snapshot the adaptation and replay remaining tasks.', schema({ planId: string, note: string }, ['planId', 'note']), () => 'resume'],
   ['unmix_verify', 'Execute registered check commands in the candidate. Rejects changed protected test/config inputs before commands run. Only configured behavior is verified. Commands are executed without a shell.', schema({ planId: string }, ['planId']), () => 'verify'],
   ['unmix_inspect', 'Read candidateTree before manual review, reconstruction diff, automated-check freshness and separate manual-check history/staleness.', schema({ planId: string }, ['planId']), () => 'inspect'],
@@ -52,13 +53,13 @@ export function serve(repo) {
         const supported = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
         const requested = req.params?.protocolVersion;
         result = { protocolVersion: supported.includes(requested) ? requested : '2025-06-18', capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'unmix', version: '0.1.5' },
-          instructions: 'Use begin/finish around each task. Prepare creates a separate candidate; Codex adapts conflicts and verifies. Never infer that test passage proves every behavior.' };
+          serverInfo: { name: 'unmix', version: '0.1.6' },
+          instructions: 'Use begin/finish around each task. Preview recorded removal impact before prepare; prepare creates a separate candidate; Codex adapts conflicts and verifies. Never infer that test passage proves every behavior.' };
         initialized = true;
       } else if (req.method === 'ping') result = {};
       else if (!initialized) throw Object.assign(new Error('Initialize first.'), { rpcCode: -32000 });
       else if (req.method === 'tools/list') result = { tools: tools.map(([name, description, inputSchema]) => ({ name, description, inputSchema,
-        annotations: { readOnlyHint: ['unmix_timeline', 'unmix_inspect', 'unmix_report', 'unmix_codex_prompt'].includes(name), destructiveHint: name === 'unmix_verify', openWorldHint: name === 'unmix_verify' } })) };
+        annotations: { readOnlyHint: ['unmix_timeline', 'unmix_preview', 'unmix_inspect', 'unmix_report', 'unmix_codex_prompt'].includes(name), destructiveHint: name === 'unmix_verify', openWorldHint: name === 'unmix_verify' } })) };
       else if (req.method === 'tools/call') {
         const tool = tools.find(t => t[0] === req.params?.name);
         if (!tool) throw Object.assign(new Error('Unknown tool.'), { rpcCode: -32602 });
