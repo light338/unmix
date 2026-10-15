@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.6 — 2026-10-16
+
+- Add read-only removal preview via MCP/CLI, with JSON and Markdown impact table.
+- Distinguish direct/transitive declared dependencies, removed tasks, shared files
+  and no recorded link without claiming to predict actual conflicts or behavior.
+- Add optional stale-timeline refusal to prepare and show active recording separately.
+- Read literal file evidence from recorded snapshots; no worktree or Git objects
+  are created by preview, and no checks/model are run.
+- Add six preview integration scenarios, CLI/MCP coverage and a generated example.
+
 ## 0.1.5 — 2026-10-16
 
 - Protect selected test/config file versions from base and retained-task evidence
