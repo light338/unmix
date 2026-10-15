@@ -13,20 +13,21 @@ while (args.length) {
   else if (flag === '--input') payload = fs.readFileSync(args.shift(), 'utf8');
   else { console.error(`Unknown option: ${flag}`); process.exit(1); }
 }
-const help = `Unmix 0.1.2 — task-aware reconstruction for Codex
+const help = `Unmix 0.1.3 — task-aware reconstruction for Codex
 Usage: node bin/unmix.mjs COMMAND --repo /absolute/repository [--json JSON | --input request.json]
-Commands: init, begin, finish, timeline, prepare, resume, verify, inspect, prompt, mcp
+Commands: init, begin, finish, timeline, prepare, resume, verify, inspect, report, prompt, mcp
 begin:   {taskId,title,intent,dependsOn?:[],checks?:[[command,arg,...]]}
 prepare: {remove:[taskId],instruction,output?:absolutePath,checks?:[[command,arg,...]]}
 resume:  {planId,note}
 verify / inspect / prompt: {planId}
+report: {planId,format?:"json"|"markdown"} — task-grouped review without executing checks
 See docs/codex.md for MCP registration and agent instructions.`;
 try {
   if (!command || command === 'help' || command === '--help') console.log(help);
   else if (command === 'mcp') serve(repo);
   else {
     const app = new Unmix(repo), input = JSON.parse(payload);
-    if (!['init', 'begin', 'finish', 'timeline', 'prepare', 'resume', 'verify', 'inspect', 'prompt'].includes(command)) throw new Error('Unknown command.');
+    if (!['init', 'begin', 'finish', 'timeline', 'prepare', 'resume', 'verify', 'inspect', 'report', 'prompt'].includes(command)) throw new Error('Unknown command.');
     const r = ['inspect', 'prompt'].includes(command) ? app[command](input.planId) : app[command](input);
     console.log(typeof r === 'string' ? r : JSON.stringify(r, null, 2));
     if (command === 'verify' && !r.passed) process.exitCode = 2;
