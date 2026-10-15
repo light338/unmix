@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { buildProtection, inspectProtection } from './protection.mjs';
 
 const identity = {
   GIT_AUTHOR_NAME: 'Unmix', GIT_AUTHOR_EMAIL: 'unmix@localhost',
@@ -139,12 +140,14 @@ export class Unmix {
     if (common !== original || fs.realpathSync(git(p.candidate, ['rev-parse', '--show-toplevel'])) !== p.candidate)
       throw new Error('Candidate is no longer the expected Git worktree.');
   }
-  prepare({ remove, output, instruction, checks: extra = [] }) {
+  prepare({ remove, output, instruction, checks: extra = [], protectedFiles = [] }) {
     checks(extra); text(instruction, 'Removal instruction');
     return this.locked(() => {
       const l = this.load();
       if (l.active) throw new Error('Finish the active task first.');
       if (!Array.isArray(remove) || !remove.length || remove.some(r => !l.tasks.some(t => t.taskId === r))) throw new Error('Select one or more finished task IDs to remove.');
+      const retained = l.tasks.filter(t => !remove.includes(t.taskId));
+      const protection = buildProtection(git, this.repo, l.base, retained, protectedFiles);
       const planId = 'plan-' + randomUUID().slice(0, 8);
       const requested = path.resolve(output || path.join(path.dirname(this.repo), `${path.basename(this.repo)}-${planId}`));
       if (fs.existsSync(requested)) throw new Error('Candidate directory must not exist.');
@@ -152,9 +155,9 @@ export class Unmix {
       if (candidate === this.repo || candidate.startsWith(this.repo + path.sep) || this.repo.startsWith(candidate + path.sep)) throw new Error('Candidate must be outside the original repository.');
       git(this.repo, ['worktree', 'add', '--detach', candidate, l.base]);
       const p = { planId, candidate, base: l.base, remove: [...new Set(remove)], instruction,
-        extraChecks: extra, cursor: 0, blocked: null, status: 'draft', verification: null, reportVersion: 1,
+        protection, extraChecks: extra, cursor: 0, blocked: null, status: 'draft', verification: null, reportVersion: 1,
         review: { tool: 'unmix_report', arguments: { planId } },
-        tasks: l.tasks.filter(t => !remove.includes(t.taskId)).map(t => ({ ...t, replay: 'pending' })),
+        tasks: retained.map(t => ({ ...t, replay: 'pending' })),
         removedTasks: l.tasks.filter(t => remove.includes(t.taskId)) };
       l.plans[planId] = p;
       // Save before replay so a process interruption still leaves a discoverable plan.
@@ -216,11 +219,20 @@ export class Unmix {
       const commands = [...new Map(configured.map(c => [JSON.stringify(c), c])).values()];
       if (!commands.length) throw new Error('No behavioral checks configured. Cannot mark a candidate verified.');
       const beforeTree = this.snapshot(p.candidate);
-      const results = commands.map(([cmd, ...args]) => ({ command: [cmd, ...args], ...run(p.candidate, cmd, args) }));
+      const integrityBefore = inspectProtection(git, this.repo, p, beforeTree);
+      const results = [];
+      if (integrityBefore.state !== 'changed') for (const [cmd, ...args] of commands) {
+        results.push({ command: [cmd, ...args], ...run(p.candidate, cmd, args) });
+        // Do not execute later checks against inputs rewritten by an earlier one.
+        if (this.snapshot(p.candidate) !== beforeTree) break;
+      }
       const afterTree = this.snapshot(p.candidate);
       const changedDuringChecks = beforeTree !== afterTree;
-      const passed = results.every(r => r.ok) && !changedDuringChecks;
-      p.verification = { passed, tree: afterTree, changedDuringChecks, results, at: new Date().toISOString(), scope: 'Configured checks only; this is not proof of all behavior.' };
+      const integrityAfter = inspectProtection(git, this.repo, p, afterTree);
+      const passed = results.length === commands.length && results.every(r => r.ok) && !changedDuringChecks
+        && integrityBefore.state !== 'changed' && integrityAfter.state !== 'changed';
+      p.verification = { passed, tree: afterTree, changedDuringChecks,
+        integrity: { before: integrityBefore, after: integrityAfter }, skipped: integrityBefore.state === 'changed' ? 'protected_inputs_changed' : null, results, at: new Date().toISOString(), scope: 'Configured checks only; this is not proof of all behavior.' };
       p.status = passed ? 'checks_passed' : 'checks_failed';
       atomic(this.file, l); return p.verification;
     });
@@ -255,7 +267,7 @@ export class Unmix {
       const p = this.getPlan(planId); this.assertCandidate(p);
       const candidateTree = this.snapshot(p.candidate);
       const verificationStale = !!p.verification && p.verification.tree !== candidateTree;
-      return { ...p, candidateTree, manualChecks: manualReview(p, candidateTree), verificationStale,
+      return { ...p, candidateTree, protectedInputs: inspectProtection(git, this.repo, p, candidateTree), manualChecks: manualReview(p, candidateTree), verificationStale,
         status: verificationStale ? 'checks_stale' : p.status,
         diff: git(p.candidate, ['diff', '--no-ext-diff', '--no-textconv', p.base, candidateTree]) };
     });
@@ -279,6 +291,7 @@ export class Unmix {
         schemaVersion: 1, planId: p.planId, candidate: p.candidate, instruction: p.instruction,
         base: p.base, candidateTree, status: verificationStale ? 'checks_stale' : p.status,
         checks: { state: !p.verification ? 'not_run' : verificationStale ? 'stale' : p.verification.passed ? 'passed' : 'failed', commands: configured, verification: p.verification },
+        protectedInputs: inspectProtection(git, this.repo, p, candidateTree),
         manualChecks: manualReview(p, candidateTree),
         blocked: p.blocked,
         tasks: p.tasks.map(t => ({
@@ -314,6 +327,7 @@ export class Unmix {
       'Repeat if another task blocks. Do not edit the ledger or weaken retained tests to make them pass.',
       'For a new removal behavior, add a separate regression check; existing checks cannot prove the requested removal.',
       'Call unmix_report before checks to review original/result patches by retained task, blockers, pending tasks and unattributed candidate changes.',
+      'Protected test/config inputs must match recorded base/retained-task evidence; inspect protectedInputs in the report. Repair implementation rather than editing protected inputs. Add separate new regression tests when needed.',
       'Call unmix_verify after all tasks replay. Passing means only that configured checks passed.',
       'Manual UI observations are separate evidence: inspect candidateTree before the interaction, then use unmix_manual_check with that expectedTree only for an observation actually performed and accurately attributed. Never invent a human check. Recheck stale observations after file changes; automated verification does not refresh them.',
       'Return candidate path, observed changes, test results and unresolved limitations. Never merge automatically.',
@@ -349,6 +363,7 @@ function renderReport(r) {
     '## Changes outside completed task snapshots', '', r.unattributed.scope, '',
     r.unattributed.diff === null ? 'Unavailable for this legacy plan.' : fence(r.unattributed.diff, 'diff'), '',
     '## Aggregate candidate diff', '', fence(r.aggregateDiff, 'diff'), '',
+    '## Protected check inputs', '', fence(JSON.stringify(r.protectedInputs, null, 2), 'json'), '',
     '## Manual checks', '', `State: ${r.manualChecks.state}`, '', fence(JSON.stringify(r.manualChecks, null, 2), 'json'), '',
     '## Checks', '', fence(JSON.stringify(r.checks, null, 2), 'json'), '', '## Scope', '', r.scope, '');
   return out.join('\n');
