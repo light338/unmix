@@ -13,11 +13,11 @@ while (args.length) {
   else if (flag === '--input') payload = fs.readFileSync(args.shift(), 'utf8');
   else { console.error(`Unknown option: ${flag}`); process.exit(1); }
 }
-const help = `Unmix 0.1.4 — task-aware reconstruction for Codex
+const help = `Unmix 0.1.5 — task-aware reconstruction for Codex
 Usage: node bin/unmix.mjs COMMAND --repo /absolute/repository [--json JSON | --input request.json]
 Commands: init, begin, finish, timeline, prepare, resume, verify, inspect, report, manual-check, prompt, mcp
 begin:   {taskId,title,intent,dependsOn?:[],checks?:[[command,arg,...]]}
-prepare: {remove:[taskId],instruction,output?:absolutePath,checks?:[[command,arg,...]]}
+prepare: {remove:[taskId],instruction,output?:absolutePath,checks?:[[command,arg,...]],protectedFiles?:[relativePath]}
 resume:  {planId,note}
 verify / inspect / prompt: {planId}
 report: {planId,format?:"json"|"markdown"} — task-grouped review without executing checks
