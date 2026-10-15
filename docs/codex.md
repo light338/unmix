@@ -52,7 +52,9 @@ existing instructions. Unmix does not automatically modify agent configuration.
 > task evidence. Resolve conflicts and stage the candidate's repaired files.
 > Call `unmix_resume` with a concrete adaptation note; repeat if more tasks block.
 > Preserve tests for retained behavior. Add checks for the removal's new behavior.
-> Once replay finishes, call `unmix_verify` and `unmix_inspect`. Report exactly
+> Call `unmix_report` before checks to review original/result patches per task,
+> blocker history, pending work and additional candidate changes. Once replay
+> finishes, call `unmix_verify`, regenerate the report and call `unmix_inspect`. Report exactly
 > which checks passed and what remains uncertain. Do not automatically merge,
 > reset the original repository or rewrite its branch.
 
@@ -67,6 +69,7 @@ existing instructions. Unmix does not automatically modify agent configuration.
 | Remove a decision | `unmix_prepare` | Candidate worktree and replay status |
 | Obtain repair evidence | `unmix_codex_prompt` | Instructions, commit pairs and checks |
 | Continue after repair | `unmix_resume` | Adaptation snapshot and remaining replay |
+| Review by task before checks | `unmix_report` | Original/result patches, blocker history and pending work; JSON or Markdown |
 | Run behavioral checks | `unmix_verify` | Per-command results |
 | Review final state | `unmix_inspect` | Difference, status and stale-check flag |
 

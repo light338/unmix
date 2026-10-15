@@ -43,7 +43,9 @@ After several recorded changes, ask Codex:
 > unmix_codex_prompt and the original snapshot diffs, then adapt dependent
 > tasks yourself. Edit only the candidate; stage conflicts and call unmix_resume
 > until replay finishes. Preserve retained tests. Add a separate check for the
-> replacement behavior. Call unmix_verify and unmix_inspect. Show the candidate
+> replacement behavior. Call unmix_report before checks to review each retained
+> task's original/result patches and adaptation notes. Call unmix_verify,
+> regenerate unmix_report and call unmix_inspect. Show the candidate
 > path, changes and verification results. Do not merge into the original.
 
 Replace the capitalized fields with your concrete request. Test the candidate
