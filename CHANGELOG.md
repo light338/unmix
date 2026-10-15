@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.7 — 2026-10-16
+
+- Add optional preservation passports with fixed requirement IDs, preserve/remove
+  criteria and automated/manual evidence in original and candidate versions.
+- Run baseline criteria in a separate original worktree. Expose pre-existing
+  failures, unproven removal, missing/stale evidence and concrete repair requests.
+- Gate candidate success on current passport obligations; retain legacy behavior
+  for plans without requirements. Add workflow and reproducible fixture.
+
 ## 0.1.6 — 2026-10-16
 
 - Add read-only removal preview via MCP/CLI, with JSON and Markdown impact table.

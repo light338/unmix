@@ -13,16 +13,17 @@ while (args.length) {
   else if (flag === '--input') payload = fs.readFileSync(args.shift(), 'utf8');
   else { console.error(`Unknown option: ${flag}`); process.exit(1); }
 }
-const help = `Unmix 0.1.6 — task-aware reconstruction for Codex
+const help = `Unmix 0.1.7 — task-aware reconstruction for Codex
 Usage: node bin/unmix.mjs COMMAND --repo /absolute/repository [--json JSON | --input request.json]
 Commands: init, begin, finish, timeline, preview, prepare, resume, verify, inspect, report, manual-check, prompt, mcp
 begin:   {taskId,title,intent,dependsOn?:[],checks?:[[command,arg,...]]}
-prepare: {remove:[taskId],instruction,output?:absolutePath,checks?:[[command,arg,...]],protectedFiles?:[relativePath],expectedTimeline?:fingerprint}
+prepare: {remove:[taskId],instruction,output?:absolutePath,checks?:[[command,arg,...]],protectedFiles?:[relativePath],expectedTimeline?:fingerprint,requirements?:[{requirementId,title,kind:"preserve"|"remove",command?:[cmd,...],checkId?:id,procedure?:text}]}
 preview: {remove:[taskId],format?:"json"|"markdown"} — read-only dependency/file impact before reconstruction
 resume:  {planId,note}
-verify / inspect / prompt: {planId}
+verify: {planId,phase?:"baseline"|"candidate"}
+inspect / prompt: {planId}
 report: {planId,format?:"json"|"markdown"} — task-grouped review without executing checks
-manual-check: {planId,checkId,title,procedure,result:"passed"|"failed",observer,note,expectedTree,evidence?:[]}
+manual-check: {planId,checkId,title,procedure,result:"passed"|"failed",observer,note,expectedTree,evidence?:[],phase?:"baseline"|"candidate"}
 See docs/codex.md for MCP registration and agent instructions.`;
 try {
   if (!command || command === 'help' || command === '--help') console.log(help);

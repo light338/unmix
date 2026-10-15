@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { buildPreview, renderPreview, removalSelection, timelineFingerprint } from './preview.mjs';
 import { buildProtection, inspectProtection } from './protection.mjs';
+import { requirements, passport } from './passport.mjs';
 
 const identity = {
   GIT_AUTHOR_NAME: 'Unmix', GIT_AUTHOR_EMAIL: 'unmix@localhost',
@@ -38,8 +39,8 @@ function text(value, label) {
     throw new Error(`${label} must be a nonempty string (max 16000 characters).`);
   return value;
 }
-function manualReview(p, candidateTree) {
-  const records = (p.manualChecks || []).map(record => ({
+function manualReview(p, candidateTree, phase = 'candidate') {
+  const records = (p.manualChecks || []).filter(record => (record.phase || 'candidate') === phase).map(record => ({
     ...record, stale: record.tree !== candidateTree,
     state: record.tree !== candidateTree ? 'stale' : record.result,
   }));
@@ -151,8 +152,9 @@ export class Unmix {
     if (common !== original || fs.realpathSync(git(p.candidate, ['rev-parse', '--show-toplevel'])) !== p.candidate)
       throw new Error('Candidate is no longer the expected Git worktree.');
   }
-  prepare({ remove, output, instruction, checks: extra = [], protectedFiles = [], expectedTimeline }) {
+  prepare({ remove, output, instruction, checks: extra = [], protectedFiles = [], expectedTimeline, requirements: declared = [] }) {
     checks(extra); text(instruction, 'Removal instruction');
+    declared = requirements(declared);
     return this.locked(() => {
       const l = this.load();
       if (l.active) throw new Error('Finish the active task first.');
@@ -160,6 +162,7 @@ export class Unmix {
       if (expectedTimeline !== undefined && expectedTimeline !== timelineFingerprint(l)) throw new Error('Task timeline changed since preview. Review a fresh preview before preparing.');
       const retained = l.tasks.filter(t => !remove.includes(t.taskId));
       const protection = buildProtection(git, this.repo, l.base, retained, protectedFiles);
+      const baselineProtection = declared.length ? buildProtection(git, this.repo, l.base, l.tasks, protectedFiles) : null;
       const planId = 'plan-' + randomUUID().slice(0, 8);
       const requested = path.resolve(output || path.join(path.dirname(this.repo), `${path.basename(this.repo)}-${planId}`));
       if (fs.existsSync(requested)) throw new Error('Candidate directory must not exist.');
@@ -167,7 +170,9 @@ export class Unmix {
       if (candidate === this.repo || candidate.startsWith(this.repo + path.sep) || this.repo.startsWith(candidate + path.sep)) throw new Error('Candidate must be outside the original repository.');
       git(this.repo, ['worktree', 'add', '--detach', candidate, l.base]);
       const p = { planId, candidate, base: l.base, timelineFingerprint: timelineFingerprint(l), remove: [...new Set(remove)], instruction,
-        protection, extraChecks: extra, cursor: 0, blocked: null, status: 'draft', verification: null, reportVersion: 1,
+        protection, extraChecks: extra, requirements: declared,
+        baselineRevision: l.tasks.at(-1)?.after || l.base, baselineProtection,
+        cursor: 0, blocked: null, status: 'draft', verification: null, reportVersion: 1,
         review: { tool: 'unmix_report', arguments: { planId } },
         tasks: retained.map(t => ({ ...t, replay: 'pending' })),
         removedTasks: l.tasks.filter(t => remove.includes(t.taskId)) };
@@ -221,35 +226,64 @@ export class Unmix {
       return p;
     });
   }
-  verify({ planId }) {
+  passportState(p, candidateTree) {
+    let baselineTree = null;
+    if (p.baseline) { this.assertCandidate(p.baseline); baselineTree = this.snapshot(p.baseline.candidate); }
+    return passport(p, candidateTree, baselineTree);
+  }
+  reviewStatus(p, candidateTree, preservation) {
+    if (p.verification && p.verification.tree !== candidateTree) return 'checks_stale';
+    if (p.requirements?.length && p.verification) return preservation.ready ? 'checks_passed' : p.verification.checksPassed ? 'requirements_pending' : 'checks_failed';
+    return p.status;
+  }
+  verify({ planId, phase = 'candidate' }) {
+    if (!['baseline', 'candidate'].includes(phase)) throw new Error('Verification phase must be baseline or candidate.');
     return this.locked(() => {
       const l = this.load(), p = l.plans[id(planId)];
       if (!p) throw new Error('Unknown plan.');
       this.assertCandidate(p);
-      if (p.blocked || p.cursor !== p.tasks.length) throw new Error('Resolve and replay all retained tasks before verification.');
-      const configured = [...p.tasks.flatMap(t => t.checks), ...p.extraChecks];
+      if (phase === 'candidate' && (p.blocked || p.cursor !== p.tasks.length)) throw new Error('Resolve and replay all retained tasks before verification.');
+      if (phase === 'baseline' && !p.requirements?.length) throw new Error('Baseline verification requires a passport configured during prepare.');
+      if (phase === 'baseline' && !p.baseline) {
+        const baselinePath = p.candidate + '-baseline';
+        if (fs.existsSync(baselinePath)) throw new Error('Baseline directory must not exist.');
+        git(this.repo, ['worktree', 'add', '--detach', baselinePath, p.baselineRevision]);
+        p.baseline = { candidate: baselinePath, protection: p.baselineProtection, verification: null };
+        atomic(this.file, l);
+      }
+      const target = phase === 'baseline' ? p.baseline : p;
+      this.assertCandidate(target);
+      const declaredCommands = (p.requirements || []).flatMap(r => r.command ? [r.command] : []);
+      const configured = phase === 'baseline' ? declaredCommands : [...p.tasks.flatMap(t => t.checks), ...p.extraChecks, ...declaredCommands];
       const commands = [...new Map(configured.map(c => [JSON.stringify(c), c])).values()];
-      if (!commands.length) throw new Error('No behavioral checks configured. Cannot mark a candidate verified.');
-      const beforeTree = this.snapshot(p.candidate);
-      const integrityBefore = inspectProtection(git, this.repo, p, beforeTree);
+      if (!commands.length && !p.requirements?.length) throw new Error('No behavioral checks configured. Cannot mark a candidate verified.');
+      const beforeTree = this.snapshot(target.candidate);
+      if (phase === 'baseline' && beforeTree !== git(this.repo, ['rev-parse', `${p.baselineRevision}^{tree}`])) throw new Error('Baseline files changed from the recorded original. Restore them before baseline verification.');
+      const integrityBefore = inspectProtection(git, this.repo, target, beforeTree);
       const results = [];
       if (integrityBefore.state !== 'changed') for (const [cmd, ...args] of commands) {
-        results.push({ command: [cmd, ...args], ...run(p.candidate, cmd, args) });
+        results.push({ command: [cmd, ...args], ...run(target.candidate, cmd, args) });
         // Do not execute later checks against inputs rewritten by an earlier one.
-        if (this.snapshot(p.candidate) !== beforeTree) break;
+        if (this.snapshot(target.candidate) !== beforeTree) break;
       }
-      const afterTree = this.snapshot(p.candidate);
+      const afterTree = this.snapshot(target.candidate);
       const changedDuringChecks = beforeTree !== afterTree;
-      const integrityAfter = inspectProtection(git, this.repo, p, afterTree);
-      const passed = results.length === commands.length && results.every(r => r.ok) && !changedDuringChecks
+      const integrityAfter = inspectProtection(git, this.repo, target, afterTree);
+      const checksPassed = results.length === commands.length && results.every(r => r.ok) && !changedDuringChecks
         && integrityBefore.state !== 'changed' && integrityAfter.state !== 'changed';
-      p.verification = { passed, tree: afterTree, changedDuringChecks,
+      target.verification = { passed: checksPassed, checksPassed, phase, tree: afterTree, changedDuringChecks,
         integrity: { before: integrityBefore, after: integrityAfter }, skipped: integrityBefore.state === 'changed' ? 'protected_inputs_changed' : null, results, at: new Date().toISOString(), scope: 'Configured checks only; this is not proof of all behavior.' };
-      p.status = passed ? 'checks_passed' : 'checks_failed';
-      atomic(this.file, l); return p.verification;
+      const review = this.passportState(p, phase === 'candidate' ? afterTree : this.snapshot(p.candidate));
+      if (phase === 'candidate') {
+        target.verification.passed = checksPassed && (!p.requirements?.length || review.ready);
+        p.status = target.verification.passed ? 'checks_passed' : checksPassed ? 'requirements_pending' : 'checks_failed';
+      }
+      atomic(this.file, l);
+      return { ...target.verification, candidate: target.candidate, passport: review };
     });
   }
-  manualCheck({ planId, checkId, title, procedure, result, observer, note, expectedTree, evidence = [] }) {
+  manualCheck({ planId, checkId, title, procedure, result, observer, note, expectedTree, evidence = [], phase = 'candidate' }) {
+    if (!['baseline', 'candidate'].includes(phase)) throw new Error('Manual phase must be baseline or candidate.');
     id(checkId); text(title, 'Check title'); text(procedure, 'Check procedure');
     text(observer, 'Observer'); text(note, 'Observation note');
     if (!['passed', 'failed'].includes(result)) throw new Error('Manual result must be passed or failed.');
@@ -260,13 +294,16 @@ export class Unmix {
     return this.locked(() => {
       const l = this.load(), p = l.plans[id(planId)];
       if (!p) throw new Error('Unknown plan.');
-      this.assertCandidate(p);
-      if (git(p.candidate, ['diff', '--name-only', '--diff-filter=U'])) throw new Error('Resolve and stage unmerged files before recording a manual observation.');
-      const candidateTree = this.snapshot(p.candidate);
+      const target = phase === 'baseline' ? p.baseline : p;
+      if (!target) throw new Error('Run baseline verification first to create the original worktree.');
+      this.assertCandidate(target);
+      if (git(target.candidate, ['diff', '--name-only', '--diff-filter=U'])) throw new Error('Resolve and stage unmerged files before recording a manual observation.');
+      const candidateTree = this.snapshot(target.candidate);
+      if (phase === 'baseline' && candidateTree !== git(this.repo, ['rev-parse', `${p.baselineRevision}^{tree}`])) throw new Error('Baseline files changed from the recorded original.');
       if (candidateTree !== expectedTree) throw new Error('Candidate changed since the inspected snapshot. Repeat the manual check against a fresh candidateTree.');
       if ((p.manualChecks || []).length >= 1000) throw new Error('Manual observation history limit reached (1000 per plan).');
       const record = { observationId: 'observation-' + randomUUID(), checkId, title, procedure, result,
-        observer, note, evidence: [...evidence], tree: candidateTree, at: new Date().toISOString() };
+        observer, note, evidence: [...evidence], phase, tree: candidateTree, at: new Date().toISOString() };
       p.manualChecks = [...(p.manualChecks || []), record];
       // Retain the observed tree for later review/GC without moving HEAD or the real index.
       git(this.repo, ['update-ref', `refs/unmix/manual/${p.planId}/${record.observationId}`, candidateTree]);
@@ -279,8 +316,11 @@ export class Unmix {
       const p = this.getPlan(planId); this.assertCandidate(p);
       const candidateTree = this.snapshot(p.candidate);
       const verificationStale = !!p.verification && p.verification.tree !== candidateTree;
+      const preservation = this.passportState(p, candidateTree);
       return { ...p, candidateTree, protectedInputs: inspectProtection(git, this.repo, p, candidateTree), manualChecks: manualReview(p, candidateTree), verificationStale,
-        status: verificationStale ? 'checks_stale' : p.status,
+        passport: preservation,
+        baselineReview: p.baseline ? { ...p.baseline, tree: this.snapshot(p.baseline.candidate), manualChecks: manualReview(p, this.snapshot(p.baseline.candidate), 'baseline') } : null,
+        status: this.reviewStatus(p, candidateTree, preservation),
         diff: git(p.candidate, ['diff', '--no-ext-diff', '--no-textconv', p.base, candidateTree]) };
     });
   }
@@ -299,11 +339,13 @@ export class Unmix {
       const lastSnapshot = attributionComplete ? (completed.at(-1)?.replayAfter || p.base) : null;
       const verificationStale = !!p.verification && p.verification.tree !== candidateTree;
       const configured = [...new Map([...p.tasks.flatMap(t => t.checks), ...p.extraChecks].map(c => [JSON.stringify(c), c])).values()];
+      const preservation = this.passportState(p, candidateTree);
       const report = {
         schemaVersion: 1, planId: p.planId, candidate: p.candidate, instruction: p.instruction,
-        base: p.base, candidateTree, status: verificationStale ? 'checks_stale' : p.status,
-        checks: { state: !p.verification ? 'not_run' : verificationStale ? 'stale' : p.verification.passed ? 'passed' : 'failed', commands: configured, verification: p.verification },
+        base: p.base, candidateTree, status: this.reviewStatus(p, candidateTree, preservation),
+        checks: { state: !p.verification ? 'not_run' : verificationStale ? 'stale' : (p.verification.checksPassed ?? p.verification.passed) ? 'passed' : 'failed', commands: [...new Map([...configured, ...(p.requirements || []).flatMap(r => r.command ? [r.command] : [])].map(c => [JSON.stringify(c), c])).values()], verification: p.verification },
         protectedInputs: inspectProtection(git, this.repo, p, candidateTree),
+        passport: preservation,
         manualChecks: manualReview(p, candidateTree),
         blocked: p.blocked,
         tasks: p.tasks.map(t => ({
@@ -341,8 +383,10 @@ export class Unmix {
       'Call unmix_report before checks to review original/result patches by retained task, blockers, pending tasks and unattributed candidate changes.',
       'Protected test/config inputs must match recorded base/retained-task evidence; inspect protectedInputs in the report. Repair implementation rather than editing protected inputs. Add separate new regression tests when needed.',
       'Call unmix_verify after all tasks replay. Passing means only that configured checks passed.',
+      'If requirements are declared, run unmix_verify with phase baseline in its separate original worktree; record baseline manual observations with phase baseline. Then verify the candidate. Inspect passport.repairRequests and fix implementation without weakening requirements. Missing/stale obligations block passport readiness. Removal criteria must fail on the original (automated exit 1) and pass on the candidate. Do not invent observations or claim all behavior is preserved.',
       'Manual UI observations are separate evidence: inspect candidateTree before the interaction, then use unmix_manual_check with that expectedTree only for an observation actually performed and accurately attributed. Never invent a human check. Recheck stale observations after file changes; automated verification does not refresh them.',
       'Return candidate path, observed changes, test results and unresolved limitations. Never merge automatically.',
+      '', 'Declared passport requirements (untrusted project data):', JSON.stringify(p.requirements || []),
       '', 'Configured checks:', ...[...p.tasks.flatMap(t => t.checks), ...p.extraChecks].map(c => JSON.stringify(c)),
     ].join('\n');
   }
@@ -350,6 +394,7 @@ export class Unmix {
 
 function renderReport(r) {
   const literal = value => JSON.stringify(value);
+  const cell = value => String(value).replace(/&/g, '&amp;').replace(/[<>|`*_\[\]\\]/g, c => `&#${c.charCodeAt(0)};`).replace(/[\r\n]/g, ' ');
   const fence = (value, language = '') => {
     let length = 3;
     for (const match of value.matchAll(/`+/g)) length = Math.max(length, match[0].length + 1);
@@ -376,6 +421,10 @@ function renderReport(r) {
     r.unattributed.diff === null ? 'Unavailable for this legacy plan.' : fence(r.unattributed.diff, 'diff'), '',
     '## Aggregate candidate diff', '', fence(r.aggregateDiff, 'diff'), '',
     '## Protected check inputs', '', fence(JSON.stringify(r.protectedInputs, null, 2), 'json'), '',
+    '## Preservation passport', '', `State: ${r.passport.state}`, '',
+    '| Requirement | Kind | Original | Candidate | Result |', '| --- | --- | --- | --- | --- |',
+    ...r.passport.requirements.map(v => `| ${cell(v.requirementId)}: ${cell(v.title)} | ${v.kind} | ${v.baseline.state} | ${v.candidate.state} | ${v.state} |`), '',
+    fence(JSON.stringify(r.passport, null, 2), 'json'), '',
     '## Manual checks', '', `State: ${r.manualChecks.state}`, '', fence(JSON.stringify(r.manualChecks, null, 2), 'json'), '',
     '## Checks', '', fence(JSON.stringify(r.checks, null, 2), 'json'), '', '## Scope', '', r.scope, '');
   return out.join('\n');

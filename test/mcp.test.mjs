@@ -70,6 +70,16 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   const refused = await tool('unmix_verify', { planId: plan.planId });
   assert.equal(refused.passed, false); assert.equal(refused.skipped, 'protected_inputs_changed');
   assert.equal((await tool('unmix_report', { planId: plan.planId })).protectedInputs.state, 'changed');
+  const obligation = { requirementId: 'base-preserved', title: 'Base remains', kind: 'preserve', command: ['node', '-e', "if(require('fs').readFileSync('base.txt','utf8')!=='base')process.exit(1)"] };
+  const passportPlan = await tool('unmix_prepare', { remove: ['drop'], instruction: 'Drop temporary file with a passport', requirements: [obligation, { requirementId: 'scroll', title: 'Scroll', kind: 'preserve', checkId: 'scroll', procedure: 'Fixture scroll procedure' }] });
+  assert.equal((await tool('unmix_verify', { planId: passportPlan.planId })).passed, false);
+  const originalReview = await tool('unmix_verify', { planId: passportPlan.planId, phase: 'baseline' });
+  const originalInspection = await tool('unmix_inspect', { planId: passportPlan.planId });
+  for (const phase of ['baseline', 'candidate']) await tool('unmix_manual_check', { ...observation, planId: passportPlan.planId, phase, checkId: 'scroll', procedure: 'Fixture scroll procedure', expectedTree: phase === 'baseline' ? originalInspection.baselineReview.tree : originalInspection.candidateTree });
+  assert.equal((await tool('unmix_verify', { planId: passportPlan.planId })).passport.ready, true);
+  assert.equal(originalReview.phase, 'baseline');
+  assert.equal((await request('tools/call', { name: 'unmix_verify', arguments: { planId: passportPlan.planId, phase: 'bad' } })).result.isError, true);
+  assert.equal((await request('tools/call', { name: 'unmix_prepare', arguments: { remove: ['drop'], instruction: 'Bad', requirements: [{ ...obligation, command: [] }] } })).result.isError, true);
   const invalid = await request('tools/call', { name: 'unmix_begin', arguments: { taskId: 'x', title: 'x', intent: 'x', repo: '/' } });
   assert.equal(invalid.result.isError, true);
   assert.equal((await request('tools/call', { name: 'missing' })).error.code, -32602);
