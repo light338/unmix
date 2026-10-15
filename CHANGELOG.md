@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.8 — 2026-10-16
+
+- Fix non-UTF8 patch corruption and isolate machine patches from Git display
+  drivers, prefix/color settings and relative path formatting.
+- Reject baseline exit-1 removal evidence without its explicit assertion marker;
+  document migration for v0.1.7 passports. Add strict ID/schema/CLI validation.
+- Pin historical replay refs, expose lossless report patches, save recoverable
+  replay checkpoints and preserve literal filenames from recorded snapshots.
+- Update the Russian start guide and add regressions for all reproduced defects.
+
 ## 0.1.7 — 2026-10-16
 
 - Add optional preservation passports with fixed requirement IDs, preserve/remove

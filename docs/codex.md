@@ -93,7 +93,9 @@ manifest or protected tests to turn a failure into a pass. See
 Declare a fixed `requirements` list in prepare to track every required scenario,
 including separate manual IDs. Use `kind:"preserve"` for behavior that should pass
 on both versions, `kind:"remove"` for desired behavior that should fail on the
-original and pass after removal. Run the baseline phase in its separate worktree,
+original and pass after removal. Automated removal criteria must emit the exact
+separate stdout line `UNMIX_EXPECTED_FAILURE:<requirementId>` and exit 1 only on
+the intended assertion failure. Import/startup failures cannot demonstrate removal. Run the baseline phase in its separate worktree,
 then candidate verification. Check `passport.ready` and `repairRequests`; missing
 or stale manual evidence cannot be replaced by passing commands. Make repairs,
 rerun commands and repeat actual interactions rather than changing requirements.

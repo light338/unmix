@@ -59,7 +59,27 @@ for review; Unmix does not merge or delete them automatically.
 `preserve` expects the same criterion to pass on both versions. `remove` expresses
 the desired new behavior: it must fail on the original and pass on the candidate.
 For example, a guest-purchase assertion should exit 1 when registration prevents
-purchase, and 0 when guests can purchase. A missing executable, timeout, signal,
+purchase, and 0 when guests can purchase. Since v0.1.8, that expected original
+failure must also print the exact separate stdout line
+`UNMIX_EXPECTED_FAILURE:guest` (substitute the requirement ID). Emit it only after
+evaluating the intended behavioral assertion, never in a blanket error handler:
+
+```js
+// The check and app import must already exist in recorded original history.
+const allowed = await canPurchaseWithoutAccount();
+if (!allowed) {
+  console.log('UNMIX_EXPECTED_FAILURE:guest');
+  process.exit(1);
+}
+```
+
+An ordinary exit 1 without this marker is `error` / `missing_failure_marker`.
+This prevents a missing test module from being accepted as behavioral evidence.
+The marker is a declared assertion contract, not independent proof the assertion
+is correct. A test that prints it before an unrelated error is itself an invalid
+criterion. Plans created under v0.1.7 without this contract fail closed after an
+upgrade: record the corrected criterion and prepare a new plan; do not rewrite
+frozen requirements or protected test inputs inside an existing plan. A missing executable, timeout, signal,
 or exit code other than 1 is an error, not removal evidence. A failing assertion
 can itself be wrong: inspect the recorded stdout/stderr and test design.
 

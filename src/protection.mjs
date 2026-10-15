@@ -28,7 +28,7 @@ export function buildProtection(git, repo, base, tasks, explicit) {
   for (const [file, entry] of treeEntries(git, repo, base)) if (isSelected(file)) entries.set(file, { file, expected: entry, source: 'base' });
   for (const task of tasks) {
     const after = treeEntries(git, repo, task.after);
-    const changed = git(repo, ['diff', '--name-only', '-z', '--no-renames', task.before, task.after]).split('\0').filter(Boolean);
+    const changed = git(repo, ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', task.before, task.after]).split('\0').filter(Boolean);
     for (const file of changed) if (isSelected(file)) entries.set(file, { file, expected: after.get(file) || null, source: task.taskId });
   }
   for (const file of selected) if (!entries.get(file)?.expected) throw new Error(`Protected file is absent from the base/retained task evidence: ${file}`);

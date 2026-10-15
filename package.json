@@ -1,6 +1,6 @@
 {
   "name": "unmix-codex-prototype",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "Task-aware reconstruction of Git projects for Codex, with evidence and behavioral checks",
   "type": "module",

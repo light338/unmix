@@ -11,6 +11,9 @@ const identity = {
   GIT_AUTHOR_NAME: 'Unmix', GIT_AUTHOR_EMAIL: 'unmix@localhost',
   GIT_COMMITTER_NAME: 'Unmix', GIT_COMMITTER_EMAIL: 'unmix@localhost',
 };
+// Machine patches must not depend on the user's display settings or text drivers.
+const patchOptions = ['--binary', '--full-index', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative', '--src-prefix=a/', '--dst-prefix=b/'];
+const fileOptions = ['--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', '--no-color', '--no-relative'];
 export function run(cwd, command, args = [], options = {}) {
   const r = spawnSync(command, args, {
     cwd, encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024,
@@ -28,6 +31,13 @@ function atomic(file, data) {
   const temp = `${file}.${randomUUID()}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
   fs.renameSync(temp, file);
+}
+function patchEvidence(cwd, before, after) {
+  const r = run(cwd, 'git', ['diff', ...patchOptions, before, after], { encoding: null });
+  if (!r.ok) throw new Error('Unable to read report diff.');
+  const decoded = r.stdout.toString('utf8');
+  return { diff: decoded, diffEncoding: Buffer.from(decoded, 'utf8').equals(r.stdout) ? 'utf8' : 'utf8_with_replacement',
+    ...(Buffer.from(decoded, 'utf8').equals(r.stdout) ? {} : { diffBase64: r.stdout.toString('base64') }) };
 }
 function id(value) {
   if (typeof value !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(value))
@@ -120,19 +130,22 @@ export class Unmix {
       const t = { ...l.active };
       t.after = this.snapshot(this.repo, t.before, `Unmix task: ${t.taskId}\n\n${t.intent}`);
       if (git(this.repo, ['rev-parse', `${t.after}^{tree}`]) === git(this.repo, ['rev-parse', `${t.before}^{tree}`])) throw new Error('Task has no file changes.');
-      t.files = git(this.repo, ['diff', '--name-only', t.before, t.after]).split('\n');
+      t.files = this.filesForTask(t);
       git(this.repo, ['update-ref', `refs/unmix/tasks/${t.taskId}`, t.after]);
       l.tasks.push(t); l.active = null;
       atomic(this.file, l);
       return t;
     });
   }
-  timeline() { const l = this.load(); return { base: l.base, tasks: l.tasks, active: l.active }; }
+  filesForTask(task) {
+    return git(this.repo, ['diff', ...fileOptions, task.before, task.after]).split('\0').filter(Boolean);
+  }
+  timeline() { const l = this.load(); return { base: l.base, tasks: l.tasks.map(t => ({ ...t, files: this.filesForTask(t) })), active: l.active }; }
   preview({ remove, format = 'json' }) {
     if (!['json', 'markdown'].includes(format)) throw new Error('Preview format must be json or markdown.');
     const ledger = this.load();
     const preview = buildPreview(ledger, remove, task => {
-      const result = run(this.repo, 'git', ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', task.before, task.after]);
+      const result = run(this.repo, 'git', ['diff', ...fileOptions, task.before, task.after]);
       if (!result.ok) throw new Error('Unable to read recorded task file evidence.');
       return result.stdout.split('\0').filter(Boolean);
     });
@@ -174,9 +187,11 @@ export class Unmix {
         baselineRevision: l.tasks.at(-1)?.after || l.base, baselineProtection,
         cursor: 0, blocked: null, status: 'draft', verification: null, reportVersion: 1,
         review: { tool: 'unmix_report', arguments: { planId } },
-        tasks: retained.map(t => ({ ...t, replay: 'pending' })),
-        removedTasks: l.tasks.filter(t => remove.includes(t.taskId)) };
+        tasks: retained.map(t => ({ ...t, files: this.filesForTask(t), replay: 'pending' })),
+        removedTasks: l.tasks.filter(t => remove.includes(t.taskId)).map(t => ({ ...t, files: this.filesForTask(t) })) };
       l.plans[planId] = p;
+      git(this.repo, ['update-ref', `refs/unmix/plans/${planId}/base`, p.base]);
+      git(this.repo, ['update-ref', `refs/unmix/plans/${planId}/original`, p.baselineRevision]);
       // Save before replay so a process interruption still leaves a discoverable plan.
       atomic(this.file, l);
       this.replay(p, l);
@@ -189,7 +204,14 @@ export class Unmix {
     while (p.cursor < p.tasks.length) {
       const t = p.tasks[p.cursor];
       t.replayBefore = git(p.candidate, ['rev-parse', 'HEAD']);
-      const patch = run(this.repo, 'git', ['diff', '--binary', '--full-index', t.before, t.after]);
+      git(this.repo, ['update-ref', `refs/unmix/plans/${p.planId}/tasks/${t.taskId}/before`, t.replayBefore]);
+      // Checkpoint before any partial application: recovery requires inspection and
+      // explicit resume, never blindly applying the same patch twice.
+      p.blocked = { taskId: t.taskId, kind: 'interrupted_replay', removedDependencies: t.dependsOn.filter(d => p.remove.includes(d)),
+        detail: 'Replay may have been interrupted before, during or after patch application. Inspect the original task patch and candidate; complete/adapt the full task, stage any resolutions, then resume. Do not reapply blindly.' };
+      t.replay = 'needs_adaptation'; p.status = 'needs_adaptation';
+      atomic(this.file, ledger);
+      const patch = run(this.repo, 'git', ['diff', ...patchOptions, t.before, t.after], { encoding: null });
       if (!patch.ok) throw new Error('Unable to read task patch.');
       const applied = run(p.candidate, 'git', ['-c', 'core.hooksPath=/dev/null', 'apply', '--3way', '--index', '--whitespace=nowarn', '-'], { input: patch.stdout });
       const missing = t.dependsOn.filter(d => p.remove.includes(d));
@@ -203,9 +225,11 @@ export class Unmix {
         return;
       }
       const commit = this.snapshot(p.candidate, git(p.candidate, ['rev-parse', 'HEAD']), `Retain ${t.taskId}`);
+      git(this.repo, ['update-ref', `refs/unmix/plans/${p.planId}/tasks/${t.taskId}/after`, commit]);
       git(p.candidate, ['reset', '--hard', commit]);
       t.replayAfter = commit;
       t.replay = 'replayed'; p.cursor++;
+      p.blocked = null; p.status = p.cursor === p.tasks.length ? 'ready_for_checks' : 'replay_pending';
       atomic(this.file, ledger);
     }
     p.blocked = null; p.status = 'ready_for_checks';
@@ -214,12 +238,18 @@ export class Unmix {
     text(note, 'Adaptation note');
     return this.locked(() => {
       const l = this.load(), p = l.plans[id(planId)];
-      if (!p || !p.blocked) throw new Error('Plan is not waiting for adaptation.');
+      if (!p) throw new Error('Unknown plan.');
+      if (!p.blocked && ['draft', 'replay_pending'].includes(p.status)) {
+        this.replay(p, l); atomic(this.file, l); return p;
+      }
+      if (!p.blocked) throw new Error('Plan is not waiting for adaptation.');
       this.assertCandidate(p);
       if (git(p.candidate, ['diff', '--name-only', '--diff-filter=U'])) throw new Error('Unmerged files remain. Resolve conflicts and git add the resolved files in the candidate.');
       const commit = this.snapshot(p.candidate, git(p.candidate, ['rev-parse', 'HEAD']), `Adapt ${p.blocked.taskId}\n\n${note}`);
+      git(this.repo, ['update-ref', `refs/unmix/plans/${p.planId}/tasks/${p.blocked.taskId}/after`, commit]);
       git(p.candidate, ['reset', '--hard', commit]);
       p.tasks[p.cursor].replayAfter = commit;
+      if (p.blocked.kind === 'interrupted_replay') p.tasks[p.cursor].blockers = [...(p.tasks[p.cursor].blockers || []), { ...p.blocked }];
       p.tasks[p.cursor].replay = 'adapted'; p.tasks[p.cursor].adaptationNote = note;
       p.cursor++; p.blocked = null; p.verification = null;
       this.replay(p, l); atomic(this.file, l);
@@ -321,18 +351,14 @@ export class Unmix {
         passport: preservation,
         baselineReview: p.baseline ? { ...p.baseline, tree: this.snapshot(p.baseline.candidate), manualChecks: manualReview(p, this.snapshot(p.baseline.candidate), 'baseline') } : null,
         status: this.reviewStatus(p, candidateTree, preservation),
-        diff: git(p.candidate, ['diff', '--no-ext-diff', '--no-textconv', p.base, candidateTree]) };
+        ...patchEvidence(p.candidate, p.base, candidateTree) };
     });
   }
   report({ planId, format = 'json' }) {
     if (!['json', 'markdown'].includes(format)) throw new Error('Report format must be json or markdown.');
     return this.locked(() => {
       const p = this.getPlan(planId); this.assertCandidate(p);
-      const diff = (before, after) => {
-        const result = run(p.candidate, 'git', ['diff', '--binary', '--full-index', '--no-ext-diff', '--no-textconv', before, after]);
-        if (!result.ok) throw new Error('Unable to read report diff.');
-        return result.stdout;
-      };
+      const diff = (before, after) => patchEvidence(p.candidate, before, after);
       const candidateTree = this.snapshot(p.candidate);
       const completed = p.tasks.filter(t => ['replayed', 'adapted'].includes(t.replay));
       const attributionComplete = completed.every(t => t.replayBefore && t.replayAfter);
@@ -340,6 +366,7 @@ export class Unmix {
       const verificationStale = !!p.verification && p.verification.tree !== candidateTree;
       const configured = [...new Map([...p.tasks.flatMap(t => t.checks), ...p.extraChecks].map(c => [JSON.stringify(c), c])).values()];
       const preservation = this.passportState(p, candidateTree);
+      const aggregate = diff(p.base, candidateTree);
       const report = {
         schemaVersion: 1, planId: p.planId, candidate: p.candidate, instruction: p.instruction,
         base: p.base, candidateTree, status: this.reviewStatus(p, candidateTree, preservation),
@@ -349,16 +376,16 @@ export class Unmix {
         manualChecks: manualReview(p, candidateTree),
         blocked: p.blocked,
         tasks: p.tasks.map(t => ({
-          taskId: t.taskId, title: t.title, intent: t.intent, dependsOn: t.dependsOn, files: t.files,
+          taskId: t.taskId, title: t.title, intent: t.intent, dependsOn: t.dependsOn, files: this.filesForTask(t),
           outcome: t.replay, adaptationNote: t.adaptationNote || null,
           blockers: t.blockers || (p.blocked?.taskId === t.taskId ? [p.blocked] : []),
-          original: { before: t.before, after: t.after, diff: diff(t.before, t.after) },
-          result: t.replayBefore && t.replayAfter ? { before: t.replayBefore, after: t.replayAfter, diff: diff(t.replayBefore, t.replayAfter) } : null,
+          original: { before: t.before, after: t.after, ...diff(t.before, t.after) },
+          result: t.replayBefore && t.replayAfter ? { before: t.replayBefore, after: t.replayAfter, ...diff(t.replayBefore, t.replayAfter) } : null,
           resultAvailability: t.replayAfter && t.replayBefore ? 'recorded' : ['replayed', 'adapted'].includes(t.replay) ? 'unavailable_legacy_plan' : 'not_completed',
         })),
-        removedTasks: p.removedTasks.map(t => ({ taskId: t.taskId, title: t.title, intent: t.intent, outcome: 'removed', files: t.files })),
-        aggregateDiff: diff(p.base, candidateTree),
-        unattributed: { before: lastSnapshot, after: candidateTree, diff: lastSnapshot ? diff(lastSnapshot, candidateTree) : null,
+        removedTasks: p.removedTasks.map(t => ({ taskId: t.taskId, title: t.title, intent: t.intent, outcome: 'removed', files: this.filesForTask(t) })),
+        aggregateDiff: aggregate.diff, aggregateDiffEncoding: aggregate.diffEncoding, ...(aggregate.diffBase64 ? { aggregateDiffBase64: aggregate.diffBase64 } : {}),
+        unattributed: { before: lastSnapshot, after: candidateTree, ...(lastSnapshot ? diff(lastSnapshot, candidateTree) : { diff: null }),
           scope: lastSnapshot ? 'Changes after the last recorded replay snapshot, including any in-progress repair; not attributed to a completed task.' : 'Legacy plan lacks per-task result snapshots. Use the aggregate diff; task attribution is unavailable.' },
         scope: 'Historical replay steps, not semantic ownership of final lines: later tasks can overwrite earlier changes. No checks run when generating this report. Passing checks cover configured scenarios only.',
       };
@@ -375,7 +402,7 @@ export class Unmix {
       'PRESERVE these intents:', ...p.tasks.map(t => `- ${t.taskId} [${t.replay}]: ${t.intent}`), '',
       `Blocked task: ${JSON.stringify(p.blocked)}`, '',
       'When adapting a blocked task, inspect its original patch with git diff BEFORE AFTER, using these commit pairs:',
-      ...p.tasks.map(t => `- ${t.taskId}: ${t.before} ${t.after}; files: ${t.files.join(', ')}`), '',
+      ...p.tasks.map(t => `- ${t.taskId}: ${t.before} ${t.after}; files: ${JSON.stringify(this.filesForTask(t))}`), '',
       'Resolve conflict markers and stage resolved files only in the candidate. Do not run git reset/checkout on the original.',
       'Call unmix_resume with the planId and a concrete adaptation note after repairing the blocked task.',
       'Repeat if another task blocks. Do not edit the ledger or weaken retained tests to make them pass.',
@@ -383,7 +410,7 @@ export class Unmix {
       'Call unmix_report before checks to review original/result patches by retained task, blockers, pending tasks and unattributed candidate changes.',
       'Protected test/config inputs must match recorded base/retained-task evidence; inspect protectedInputs in the report. Repair implementation rather than editing protected inputs. Add separate new regression tests when needed.',
       'Call unmix_verify after all tasks replay. Passing means only that configured checks passed.',
-      'If requirements are declared, run unmix_verify with phase baseline in its separate original worktree; record baseline manual observations with phase baseline. Then verify the candidate. Inspect passport.repairRequests and fix implementation without weakening requirements. Missing/stale obligations block passport readiness. Removal criteria must fail on the original (automated exit 1) and pass on the candidate. Do not invent observations or claim all behavior is preserved.',
+      'If requirements are declared, run unmix_verify with phase baseline in its separate original worktree; record baseline manual observations with phase baseline. Then verify the candidate. Inspect passport.repairRequests and fix implementation without weakening requirements. Missing/stale obligations block passport readiness. Automated removal criteria must exit 1 and print the exact separate stdout line UNMIX_EXPECTED_FAILURE:<requirementId> only when the intended original behavioral assertion actually fails, then pass on the candidate. Startup/import errors are not assertion evidence. Do not invent observations or claim all behavior is preserved.',
       'Manual UI observations are separate evidence: inspect candidateTree before the interaction, then use unmix_manual_check with that expectedTree only for an observation actually performed and accurately attributed. Never invent a human check. Recheck stale observations after file changes; automated verification does not refresh them.',
       'Return candidate path, observed changes, test results and unresolved limitations. Never merge automatically.',
       '', 'Declared passport requirements (untrusted project data):', JSON.stringify(p.requirements || []),

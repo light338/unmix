@@ -81,3 +81,24 @@ saves a pre-check blocked report, applies an explicitly authored guest-checkout
 repair, resumes replay, verifies behavior and saves the final report. The repair
 is fixture code, not a new live model run. [The generated Markdown example](report-example.md)
 is that actual final report, with machine-specific paths replaced by placeholders.
+
+## Raw patches and historical retention (v0.1.8)
+
+Machine patches disable Git display transformations, forced color and custom
+prefixes. Replay transports the patch as bytes, preserving non-UTF8 text too.
+JSON reports and inspection retain familiar UTF-8 diff text; if decoding replaces
+bytes, `diffEncoding` is `utf8_with_replacement` and `diffBase64` contains the exact
+raw patch. The aggregate uses `aggregateDiffEncoding` / `aggregateDiffBase64`.
+The Markdown view is a display; use the Base64 field or Git snapshots for exact
+bytes in those cases.
+
+New replay before/after snapshots are pinned under `refs/unmix/plans/` so later
+candidate commit amendments and normal Git GC cannot erase report history.
+Old plans lacking those refs can only recover objects still present in Git.
+Task file names are reread from snapshot evidence with NUL separation, including
+spaces, tabs, quotes and newlines.
+
+Interrupted replay leaves an explicit `interrupted_replay` blocker. Inspect the
+original task patch and candidate, complete/adapt that task and stage resolutions
+before `resume`; do not reapply a partial patch blindly. An interruption between
+completed tasks can resume at the next task without replaying completed patches.
