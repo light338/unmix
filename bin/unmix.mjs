@@ -6,14 +6,7 @@ import { serve } from '../src/mcp.mjs';
 const args = process.argv.slice(2);
 const command = args.shift();
 let repo = process.cwd(), payload = '{}';
-while (args.length) {
-  const flag = args.shift();
-  if (flag === '--repo') repo = args.shift();
-  else if (flag === '--json') payload = args.shift();
-  else if (flag === '--input') payload = fs.readFileSync(args.shift(), 'utf8');
-  else { console.error(`Unknown option: ${flag}`); process.exit(1); }
-}
-const help = `Unmix 0.1.7 — task-aware reconstruction for Codex
+const help = `Unmix 0.1.8 — task-aware reconstruction for Codex
 Usage: node bin/unmix.mjs COMMAND --repo /absolute/repository [--json JSON | --input request.json]
 Commands: init, begin, finish, timeline, preview, prepare, resume, verify, inspect, report, manual-check, prompt, mcp
 begin:   {taskId,title,intent,dependsOn?:[],checks?:[[command,arg,...]]}
@@ -26,6 +19,15 @@ report: {planId,format?:"json"|"markdown"} — task-grouped review without execu
 manual-check: {planId,checkId,title,procedure,result:"passed"|"failed",observer,note,expectedTree,evidence?:[],phase?:"baseline"|"candidate"}
 See docs/codex.md for MCP registration and agent instructions.`;
 try {
+  while (args.length) {
+    const flag = args.shift();
+    if (!['--repo', '--json', '--input'].includes(flag)) throw new Error(`Unknown option: ${flag}`);
+    const value = args.shift();
+    if (typeof value !== 'string' || !value.trim() || value.startsWith('--')) throw new Error(`Option ${flag} requires a value.`);
+    if (flag === '--repo') repo = value;
+    else if (flag === '--json') payload = value;
+    else payload = fs.readFileSync(value, 'utf8');
+  }
   if (!command || command === 'help' || command === '--help') console.log(help);
   else if (command === 'mcp') serve(repo);
   else {
