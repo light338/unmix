@@ -8,7 +8,7 @@ for each task. When you remove a task, it constructs a separate Git worktree,
 replays retained changes, and hands conflicts or missing dependencies to Codex
 for adaptation.
 
-**v0.1.7 is an experimental release.** Git performs
+**v0.1.8 is an experimental release.** Git performs
 patch replay. Codex or a human performs semantic adaptation. Unmix coordinates
 that work and reports evidence. It does not guarantee preservation of all
 behavior, infer all dependencies, or automatically merge the candidate.
@@ -162,6 +162,8 @@ ID/procedure. Run `verify` with `phase:"baseline"` in a separate recorded-origin
 worktree, then verify the candidate. Preservation criteria need passing evidence
 on both versions; removal criteria need a failing original and passing candidate.
 Missing or stale manual obligations block passport readiness even if commands pass.
+Automated removal criteria must print the explicit expected-failure marker described
+in the guide; a missing test returning exit 1 is not behavioral evidence.
 Reports include per-requirement original/candidate evidence and repair requests.
 This covers declared scenarios only; manual observations remain caller supplied.
 
