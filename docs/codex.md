@@ -72,6 +72,7 @@ existing instructions. Unmix does not automatically modify agent configuration.
 | Obtain repair evidence | `unmix_codex_prompt` | Instructions, commit pairs and checks |
 | Continue after repair | `unmix_resume` | Adaptation snapshot and remaining replay |
 | Review by task before checks | `unmix_report` | Original/result patches, blocker history and pending work; JSON or Markdown |
+| Compare passport criteria on the original | `unmix_verify` with `phase:"baseline"` | Separate recorded-original worktree, command evidence and baseline manual review |
 | Run behavioral checks | `unmix_verify` | Per-command results |
 | Record an actual manual observation | `unmix_manual_check` | Caller-supplied result tied to the pre-check candidateTree; see [manual checks](manual-checks.md) |
 | Review final state | `unmix_inspect` | Candidate tree, difference, automated freshness and manual observations |
@@ -86,6 +87,17 @@ in `unmix_prepare` for custom repository-relative scripts and fixtures not found
 the naming heuristic. Review `protectedInputs` in the report; do not edit the
 manifest or protected tests to turn a failure into a pass. See
 [protected inputs](protected-inputs.md) for legacy behavior and limits.
+
+## Preservation passport
+
+Declare a fixed `requirements` list in prepare to track every required scenario,
+including separate manual IDs. Use `kind:"preserve"` for behavior that should pass
+on both versions, `kind:"remove"` for desired behavior that should fail on the
+original and pass after removal. Run the baseline phase in its separate worktree,
+then candidate verification. Check `passport.ready` and `repairRequests`; missing
+or stale manual evidence cannot be replaced by passing commands. Make repairs,
+rerun commands and repeat actual interactions rather than changing requirements.
+See [full workflow and limits](preservation-passport.md).
 
 ## Example user request to Codex
 
