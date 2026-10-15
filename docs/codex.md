@@ -46,7 +46,8 @@ existing instructions. Unmix does not automatically modify agent configuration.
 > a task. Task snapshots include all nonignored project files.
 >
 > When the user removes a decision, call `unmix_timeline`, select its task IDs,
-> and call `unmix_prepare` with the user's desired replacement behavior and
+> call `unmix_preview` with the chosen removal IDs, review the dependency/file signals,
+> and call `unmix_prepare` with its `expectedTimeline` fingerprint and the user's desired replacement behavior and
 > checks for that behavior. Use `unmix_codex_prompt` to inspect the repair brief.
 > Edit only the returned candidate worktree. Read original snapshot diffs for
 > task evidence. Resolve conflicts and stage the candidate's repaired files.
@@ -66,6 +67,7 @@ existing instructions. Unmix does not automatically modify agent configuration.
 | Start task | `unmix_begin` | Intent, dependency IDs, command vectors |
 | Finish task | `unmix_finish` | Snapshot commits and changed files |
 | Review history | `unmix_timeline` | Recorded tasks |
+| Preview removal impact | `unmix_preview` | Recorded dependency paths, shared files and unknowns; no reconstruction |
 | Remove a decision | `unmix_prepare` | Candidate worktree and replay status |
 | Obtain repair evidence | `unmix_codex_prompt` | Instructions, commit pairs and checks |
 | Continue after repair | `unmix_resume` | Adaptation snapshot and remaining replay |
