@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5 — 2026-10-16
+
+- Protect selected test/config file versions from base and retained-task evidence
+  before candidate adaptation, with literal custom `protectedFiles` paths.
+- Refuse changed protected inputs before executing checks; expose violations in
+  inspection and JSON/Markdown reports. Keep legacy protection unavailable explicit.
+- Stop subsequent commands after a check changes nonignored candidate content.
+- Add six protection integration scenarios and extend CLI/MCP coverage.
+- Keep the independent live auditor's retained-test diagnosis before status checks.
+
 ## 0.1.4 — 2026-10-15
 
 - Added `unmix_manual_check` MCP tool and `manual-check` CLI command following

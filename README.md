@@ -8,7 +8,7 @@ for each task. When you remove a task, it constructs a separate Git worktree,
 replays retained changes, and hands conflicts or missing dependencies to Codex
 for adaptation.
 
-**v0.1.4 is an experimental release.** Git performs
+**v0.1.5 is an experimental release.** Git performs
 patch replay. Codex or a human performs semantic adaptation. Unmix coordinates
 that work and reports evidence. It does not guarantee preservation of all
 behavior, infer all dependencies, or automatically merge the candidate.
@@ -125,6 +125,18 @@ The guest check in this example must be present in the candidate before
 verification. This tool executes exactly the configured command vectors, with
 no shell interpolation. Commands are trusted project code and can have side
 effects; the worktree is **not an OS security sandbox**.
+
+## Protect tests during adaptation
+
+New plans freeze selected test/config files from the base and retained-task
+snapshots. `unmix_verify` refuses changed protected inputs before running commands,
+and inspection/report shows exact violations. This prevents an edited assertion
+or test script from silently producing a passing result. Add custom repository
+paths with `protectedFiles` in `prepare`; new regression tests remain possible.
+
+See [protected-input workflow and limits](docs/protected-inputs.md). Discovery is
+heuristic, external/runtime inputs are not frozen, and legacy plans need preparing
+again for enforcement. This is a workflow guard, not a security sandbox.
 
 ## Record manual interaction checks
 
