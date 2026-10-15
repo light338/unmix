@@ -12,8 +12,9 @@ const tools = [
   ['unmix_prepare', 'Create a separate Git worktree omitting selected tasks. Replay retained patches; stop at conflicts or removed dependencies. Use unmix_report to review original/result patches by task before checks.', schema({ remove: { type: 'array', minItems: 1, items: string }, instruction: string, checks: commandList }, ['remove', 'instruction']), () => 'prepare'],
   ['unmix_resume', 'After Codex repairs and stages conflicts in the candidate, snapshot the adaptation and replay remaining tasks.', schema({ planId: string, note: string }, ['planId', 'note']), () => 'resume'],
   ['unmix_verify', 'Execute registered check commands in the candidate. Only configured behavior is verified. Commands are executed without a shell.', schema({ planId: string }, ['planId']), () => 'verify'],
-  ['unmix_inspect', 'Read reconstruction status, patch and whether verification has become stale.', schema({ planId: string }, ['planId']), () => 'inspect'],
-  ['unmix_report', 'Review original and resulting patches by retained task, adaptations, blockers, pending and removed tasks, and unattributed changes. Does not execute checks. Legacy plans may lack result snapshots.', schema({ planId: string, format: { ...string, enum: ['json', 'markdown'] } }, ['planId']), () => 'report'],
+  ['unmix_inspect', 'Read candidateTree before manual review, reconstruction diff, automated-check freshness and separate manual-check history/staleness.', schema({ planId: string }, ['planId']), () => 'inspect'],
+  ['unmix_manual_check', 'Record an actually performed manual observation against expectedTree from inspection before the interaction. Caller must accurately identify observer and procedure; this does not prove a human acted. Results become stale when candidate file content changes. Does not run checks or refresh automated verification.', schema({ planId: string, checkId: string, title: string, procedure: string, result: { ...string, enum: ['passed', 'failed'] }, observer: string, note: string, expectedTree: string, evidence: { type: 'array', maxItems: 16, items: string } }, ['planId', 'checkId', 'title', 'procedure', 'result', 'observer', 'note', 'expectedTree']), () => 'manualCheck'],
+  ['unmix_report', 'Review original and resulting patches by retained task, adaptations, blockers, pending and removed tasks, and unattributed changes. Includes manual observations and freshness separately from automated checks. Does not execute checks. Legacy plans may lack result snapshots.', schema({ planId: string, format: { ...string, enum: ['json', 'markdown'] } }, ['planId']), () => 'report'],
   ['unmix_codex_prompt', 'Return instructions and task evidence for adapting a reconstruction with Codex.', schema({ planId: string }, ['planId']), () => 'prompt'],
 ];
 function validate(value, s, label = 'arguments') {
@@ -51,7 +52,7 @@ export function serve(repo) {
         const supported = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
         const requested = req.params?.protocolVersion;
         result = { protocolVersion: supported.includes(requested) ? requested : '2025-06-18', capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'unmix', version: '0.1.3' },
+          serverInfo: { name: 'unmix', version: '0.1.4' },
           instructions: 'Use begin/finish around each task. Prepare creates a separate candidate; Codex adapts conflicts and verifies. Never infer that test passage proves every behavior.' };
         initialized = true;
       } else if (req.method === 'ping') result = {};

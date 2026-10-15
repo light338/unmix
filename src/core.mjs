@@ -36,6 +36,17 @@ function text(value, label) {
     throw new Error(`${label} must be a nonempty string (max 16000 characters).`);
   return value;
 }
+function manualReview(p, candidateTree) {
+  const records = (p.manualChecks || []).map(record => ({
+    ...record, stale: record.tree !== candidateTree,
+    state: record.tree !== candidateTree ? 'stale' : record.result,
+  }));
+  const latest = [...new Map(records.map(record => [record.checkId, record])).values()];
+  const state = !latest.length ? 'not_recorded' : latest.some(r => r.stale) ? 'stale'
+    : latest.some(r => r.result === 'failed') ? 'failed' : 'passed';
+  return { state, latest, history: records,
+    scope: 'Caller-supplied observations, not independently verified human actions. Freshness covers nonignored Git file content and modes only; runtime, browser, data and external services are not tracked.' };
+}
 function checks(value = []) {
   if (!Array.isArray(value) || value.length > 32 || value.some(c => !Array.isArray(c) || !c.length || c.length > 64 || c.some(a => typeof a !== 'string' || !a || a.includes('\0'))))
     throw new Error('Checks must be an array of command argument arrays, e.g. [["node", "--test", "test/payment.test.mjs"]].');
@@ -214,12 +225,40 @@ export class Unmix {
       atomic(this.file, l); return p.verification;
     });
   }
+  manualCheck({ planId, checkId, title, procedure, result, observer, note, expectedTree, evidence = [] }) {
+    id(checkId); text(title, 'Check title'); text(procedure, 'Check procedure');
+    text(observer, 'Observer'); text(note, 'Observation note');
+    if (!['passed', 'failed'].includes(result)) throw new Error('Manual result must be passed or failed.');
+    if (typeof expectedTree !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(expectedTree))
+      throw new Error('expectedTree must be the candidateTree from inspection before the manual check.');
+    if (!Array.isArray(evidence) || evidence.length > 16) throw new Error('Evidence must be an array of at most 16 reference strings.');
+    evidence.forEach(value => text(value, 'Evidence reference'));
+    return this.locked(() => {
+      const l = this.load(), p = l.plans[id(planId)];
+      if (!p) throw new Error('Unknown plan.');
+      this.assertCandidate(p);
+      if (git(p.candidate, ['diff', '--name-only', '--diff-filter=U'])) throw new Error('Resolve and stage unmerged files before recording a manual observation.');
+      const candidateTree = this.snapshot(p.candidate);
+      if (candidateTree !== expectedTree) throw new Error('Candidate changed since the inspected snapshot. Repeat the manual check against a fresh candidateTree.');
+      if ((p.manualChecks || []).length >= 1000) throw new Error('Manual observation history limit reached (1000 per plan).');
+      const record = { observationId: 'observation-' + randomUUID(), checkId, title, procedure, result,
+        observer, note, evidence: [...evidence], tree: candidateTree, at: new Date().toISOString() };
+      p.manualChecks = [...(p.manualChecks || []), record];
+      // Retain the observed tree for later review/GC without moving HEAD or the real index.
+      git(this.repo, ['update-ref', `refs/unmix/manual/${p.planId}/${record.observationId}`, candidateTree]);
+      atomic(this.file, l);
+      return { ...record, stale: false, state: result };
+    });
+  }
   inspect(planId) {
-    const p = this.getPlan(planId);
-    this.assertCandidate(p);
-    const verificationStale = !!p.verification && p.verification.tree !== this.snapshot(p.candidate);
-    return { ...p, verificationStale, status: verificationStale ? 'checks_stale' : p.status,
-      diff: run(p.candidate, 'git', ['diff', p.base]).stdout };
+    return this.locked(() => {
+      const p = this.getPlan(planId); this.assertCandidate(p);
+      const candidateTree = this.snapshot(p.candidate);
+      const verificationStale = !!p.verification && p.verification.tree !== candidateTree;
+      return { ...p, candidateTree, manualChecks: manualReview(p, candidateTree), verificationStale,
+        status: verificationStale ? 'checks_stale' : p.status,
+        diff: git(p.candidate, ['diff', '--no-ext-diff', '--no-textconv', p.base, candidateTree]) };
+    });
   }
   report({ planId, format = 'json' }) {
     if (!['json', 'markdown'].includes(format)) throw new Error('Report format must be json or markdown.');
@@ -240,6 +279,7 @@ export class Unmix {
         schemaVersion: 1, planId: p.planId, candidate: p.candidate, instruction: p.instruction,
         base: p.base, candidateTree, status: verificationStale ? 'checks_stale' : p.status,
         checks: { state: !p.verification ? 'not_run' : verificationStale ? 'stale' : p.verification.passed ? 'passed' : 'failed', commands: configured, verification: p.verification },
+        manualChecks: manualReview(p, candidateTree),
         blocked: p.blocked,
         tasks: p.tasks.map(t => ({
           taskId: t.taskId, title: t.title, intent: t.intent, dependsOn: t.dependsOn, files: t.files,
@@ -275,6 +315,7 @@ export class Unmix {
       'For a new removal behavior, add a separate regression check; existing checks cannot prove the requested removal.',
       'Call unmix_report before checks to review original/result patches by retained task, blockers, pending tasks and unattributed candidate changes.',
       'Call unmix_verify after all tasks replay. Passing means only that configured checks passed.',
+      'Manual UI observations are separate evidence: inspect candidateTree before the interaction, then use unmix_manual_check with that expectedTree only for an observation actually performed and accurately attributed. Never invent a human check. Recheck stale observations after file changes; automated verification does not refresh them.',
       'Return candidate path, observed changes, test results and unresolved limitations. Never merge automatically.',
       '', 'Configured checks:', ...[...p.tasks.flatMap(t => t.checks), ...p.extraChecks].map(c => JSON.stringify(c)),
     ].join('\n');
@@ -308,6 +349,7 @@ function renderReport(r) {
     '## Changes outside completed task snapshots', '', r.unattributed.scope, '',
     r.unattributed.diff === null ? 'Unavailable for this legacy plan.' : fence(r.unattributed.diff, 'diff'), '',
     '## Aggregate candidate diff', '', fence(r.aggregateDiff, 'diff'), '',
+    '## Manual checks', '', `State: ${r.manualChecks.state}`, '', fence(JSON.stringify(r.manualChecks, null, 2), 'json'), '',
     '## Checks', '', fence(JSON.stringify(r.checks, null, 2), 'json'), '', '## Scope', '', r.scope, '');
   return out.join('\n');
 }
