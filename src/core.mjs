@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { buildPreview, renderPreview, removalSelection, timelineFingerprint } from './preview.mjs';
 import { buildProtection, inspectProtection } from './protection.mjs';
 
 const identity = {
@@ -126,6 +127,16 @@ export class Unmix {
     });
   }
   timeline() { const l = this.load(); return { base: l.base, tasks: l.tasks, active: l.active }; }
+  preview({ remove, format = 'json' }) {
+    if (!['json', 'markdown'].includes(format)) throw new Error('Preview format must be json or markdown.');
+    const ledger = this.load();
+    const preview = buildPreview(ledger, remove, task => {
+      const result = run(this.repo, 'git', ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--no-textconv', task.before, task.after]);
+      if (!result.ok) throw new Error('Unable to read recorded task file evidence.');
+      return result.stdout.split('\0').filter(Boolean);
+    });
+    return format === 'markdown' ? renderPreview(preview) : preview;
+  }
   getPlan(planId) {
     id(planId);
     const p = this.load().plans[planId];
@@ -140,12 +151,13 @@ export class Unmix {
     if (common !== original || fs.realpathSync(git(p.candidate, ['rev-parse', '--show-toplevel'])) !== p.candidate)
       throw new Error('Candidate is no longer the expected Git worktree.');
   }
-  prepare({ remove, output, instruction, checks: extra = [], protectedFiles = [] }) {
+  prepare({ remove, output, instruction, checks: extra = [], protectedFiles = [], expectedTimeline }) {
     checks(extra); text(instruction, 'Removal instruction');
     return this.locked(() => {
       const l = this.load();
       if (l.active) throw new Error('Finish the active task first.');
-      if (!Array.isArray(remove) || !remove.length || remove.some(r => !l.tasks.some(t => t.taskId === r))) throw new Error('Select one or more finished task IDs to remove.');
+      remove = removalSelection(l, remove);
+      if (expectedTimeline !== undefined && expectedTimeline !== timelineFingerprint(l)) throw new Error('Task timeline changed since preview. Review a fresh preview before preparing.');
       const retained = l.tasks.filter(t => !remove.includes(t.taskId));
       const protection = buildProtection(git, this.repo, l.base, retained, protectedFiles);
       const planId = 'plan-' + randomUUID().slice(0, 8);
@@ -154,7 +166,7 @@ export class Unmix {
       const candidate = path.join(fs.realpathSync(path.dirname(requested)), path.basename(requested));
       if (candidate === this.repo || candidate.startsWith(this.repo + path.sep) || this.repo.startsWith(candidate + path.sep)) throw new Error('Candidate must be outside the original repository.');
       git(this.repo, ['worktree', 'add', '--detach', candidate, l.base]);
-      const p = { planId, candidate, base: l.base, remove: [...new Set(remove)], instruction,
+      const p = { planId, candidate, base: l.base, timelineFingerprint: timelineFingerprint(l), remove: [...new Set(remove)], instruction,
         protection, extraChecks: extra, cursor: 0, blocked: null, status: 'draft', verification: null, reportVersion: 1,
         review: { tool: 'unmix_report', arguments: { planId } },
         tasks: retained.map(t => ({ ...t, replay: 'pending' })),
