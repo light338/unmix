@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Unmix, run } from '../src/core.mjs';
+import { expectedFailureMarker } from '../src/passport.mjs';
 
 // Authored CLI fixture, not a live model adaptation or a human/browser test.
 export function passportExample(root) {
@@ -16,11 +17,11 @@ export function passportExample(root) {
   fs.writeFileSync(path.join(repo, 'app.json'), JSON.stringify({ registration: true, payment: true })); app.finish();
   app.begin({ taskId: 'receipt', title: 'Receipt export', intent: 'Retain receipt export' });
   fs.writeFileSync(path.join(repo, 'receipt.txt'), 'Receipt export fixture'); app.finish();
-  const criterion = expression => ['node', '-e', `const a=JSON.parse(require('fs').readFileSync('app.json'));process.exit((${expression})?0:1)`];
+  const criterion = (expression, expectedFailureId) => ['node', '-e', `const a=JSON.parse(require('fs').readFileSync('app.json'));if(!(${expression})){${expectedFailureId ? `console.log(${JSON.stringify(expectedFailureMarker(expectedFailureId))});` : ''}process.exit(1)}`];
   const manual = { requirementId: 'scroll', title: 'Scroll position stays', kind: 'preserve', checkId: 'scroll-position', procedure: 'Fixture procedure: record scroll position before and after interaction.' };
   const plan = app.prepare({ remove: ['registration'], instruction: 'Allow guest purchase and retain payment, receipt and scroll behavior', requirements: [
     { requirementId: 'payment', title: 'Payment available', kind: 'preserve', command: criterion('a.payment') },
-    { requirementId: 'guest', title: 'Guest purchase available', kind: 'remove', command: criterion('!a.registration') },
+    { requirementId: 'guest', title: 'Guest purchase available', kind: 'remove', command: criterion('!a.registration','guest') },
     { requirementId: 'receipt', title: 'Receipt export retained', kind: 'preserve', command: ['node', '-e', "process.exit(require('fs').existsSync('receipt.txt')?0:1)"] }, manual,
   ] });
   app.verify({ planId: plan.planId, phase: 'baseline' });
