@@ -8,7 +8,7 @@ for each task. When you remove a task, it constructs a separate Git worktree,
 replays retained changes, and hands conflicts or missing dependencies to Codex
 for adaptation.
 
-**v0.1.2 is an experimental release.** Git performs
+**v0.1.3 is an experimental release.** Git performs
 patch replay. Codex or a human performs semantic adaptation. Unmix coordinates
 that work and reports evidence. It does not guarantee preservation of all
 behavior, infer all dependencies, or automatically merge the candidate.
@@ -46,7 +46,7 @@ Replace both absolute paths with the locations on your computer:
 codex mcp add unmix -- node /absolute/unmix/bin/unmix.mjs mcp --repo /absolute/your-project
 ```
 
-Open Codex in your project and check `/mcp`. The server exposes nine tools for
+Open Codex in your project and check `/mcp`. The server exposes ten tools for
 initializing, recording, reconstructing, inspecting, adapting, and verifying
 tasks. See [the Codex guide](docs/codex.md) for the complete workflow and a
 project instruction block. A real authenticated Codex CLI/MCP connection and
@@ -98,6 +98,28 @@ node /absolute/unmix/bin/unmix.mjs prepare --repo /absolute/your-project --json 
 adaptation even when a patch applies without text conflicts. Codex edits only
 the candidate, stages resolved conflicts, then calls `unmix_resume`. After all
 retained tasks replay, `unmix_verify` runs retained checks and additional checks.
+
+## Review changes by task
+
+Before running checks, call `unmix_report` with `{ "planId": "PLAN_ID" }`.
+It returns structured evidence for every retained task: the original patch,
+the recorded resulting patch, replay outcome, adaptation note and blocker history.
+Removed tasks, pending work, the current blocker and additional candidate changes
+are listed separately. Report generation does not execute checks.
+
+To save the same review as Markdown:
+
+```sh
+node /absolute/unmix/bin/unmix.mjs report --repo /absolute/your-project --json '{"planId":"PLAN_ID","format":"markdown"}' > review.md
+```
+
+Save the report outside the original and candidate repositories so it does not
+become an extra project change. Read it before checks, then regenerate it afterward
+for results and freshness. See [report details](docs/task-report.md) and a
+[generated example](docs/report-example.md). Plans prepared before v0.1.3 explicitly
+report unavailable per-task result snapshots; create a new plan for full evidence.
+Task diffs describe historical replay steps: later tasks may overwrite earlier
+changes. They do not prove semantic preservation or final ownership of every line.
 
 The guest check in this example must be present in the candidate before
 verification. This tool executes exactly the configured command vectors, with

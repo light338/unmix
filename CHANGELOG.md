@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.3 — 2026-10-15
+
+- Added `unmix_report` MCP tool and `report` CLI command in JSON and Markdown.
+- Retained tasks now record original and resulting snapshot pairs for per-task review.
+- Blocker history and adaptation notes remain visible after replay resumes.
+- Removed, pending and unfinished tasks are distinguished from completed results.
+- Additional candidate changes, including untracked files, appear separately;
+  reports expose check freshness without executing checks.
+- Legacy plans explicitly mark missing result evidence instead of inferring it.
+- Added a generated review example and regression coverage through core, CLI and MCP.
+- Implemented following bomtobe-hgkim's reviewability feedback in Codex Discussion #53955.
+
 ## 0.1.2 — 2026-10-14
 
 - First-project walkthrough for recording and removing a decision through Codex.
