@@ -41,7 +41,7 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   await tool('unmix_init');
   await tool('unmix_begin', { taskId: 'drop', title: 'Drop', intent: 'Temporary file' });
   fs.writeFileSync(path.join(repo, 'drop.txt'), 'drop'); await tool('unmix_finish');
-  const plan = await tool('unmix_prepare', { remove: ['drop'], instruction: 'Remove the temporary file', checks: [['node', '-e', "if(require('fs').existsSync('drop.txt'))process.exit(1)"]] });
+  const plan = await tool('unmix_prepare', { remove: ['drop'], instruction: 'Remove the temporary file', protectedFiles: ['base.txt'], checks: [['node', '-e', "if(require('fs').existsSync('drop.txt'))process.exit(1)"]] });
   assert.equal((await tool('unmix_verify', { planId: plan.planId })).passed, true);
   const report = await tool('unmix_report', { planId: plan.planId });
   assert.equal(report.checks.state, 'passed');
@@ -60,6 +60,10 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   assert.equal((await tool('unmix_report', { planId: plan.planId })).manualChecks.state, 'stale');
   assert.equal((await request('tools/call', { name: 'unmix_manual_check', arguments: observation })).result.isError, true);
   assert.equal((await request('tools/call', { name: 'unmix_manual_check', arguments: { ...observation, result: 'maybe' } })).result.isError, true);
+  fs.writeFileSync(path.join(plan.candidate, 'base.txt'), 'weakened contract');
+  const refused = await tool('unmix_verify', { planId: plan.planId });
+  assert.equal(refused.passed, false); assert.equal(refused.skipped, 'protected_inputs_changed');
+  assert.equal((await tool('unmix_report', { planId: plan.planId })).protectedInputs.state, 'changed');
   const invalid = await request('tools/call', { name: 'unmix_begin', arguments: { taskId: 'x', title: 'x', intent: 'x', repo: '/' } });
   assert.equal(invalid.result.isError, true);
   assert.equal((await request('tools/call', { name: 'missing' })).error.code, -32602);
