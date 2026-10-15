@@ -48,6 +48,13 @@ against `candidateTree`. File changes mark prior results stale; automated checks
 do not refresh them. A plan's `checks_passed` status only covers executable checks:
 read `manualChecks` too. See [recording workflow and limits](manual-checks.md).
 
+## Protected check inputs (v0.1.5)
+
+`protectedInputs` shows whether selected recorded tests/config files still match,
+with expected/actual object IDs, modes and provenance. Verification refuses
+changed inputs before execution; legacy plans explicitly lack a baseline.
+See [protected-input workflow and limits](protected-inputs.md).
+
 ## Interpret the result carefully
 
 These are historical replay steps, not semantic ownership of final lines. If task
