@@ -8,7 +8,7 @@ for each task. When you remove a task, it constructs a separate Git worktree,
 replays retained changes, and hands conflicts or missing dependencies to Codex
 for adaptation.
 
-**v0.1.6 is an experimental release.** Git performs
+**v0.1.7 is an experimental release.** Git performs
 patch replay. Codex or a human performs semantic adaptation. Unmix coordinates
 that work and reports evidence. It does not guarantee preservation of all
 behavior, infer all dependencies, or automatically merge the candidate.
@@ -154,6 +154,20 @@ See [protected-input workflow and limits](docs/protected-inputs.md). Discovery i
 heuristic, external/runtime inputs are not frozen, and legacy plans need preparing
 again for enforcement. This is a workflow guard, not a security sandbox.
 
+## Declare a preservation passport
+
+Before adapting, give `prepare` a `requirements` list: stable IDs for behavior to
+preserve and desired removal behavior, each bound to a command or a manual check
+ID/procedure. Run `verify` with `phase:"baseline"` in a separate recorded-original
+worktree, then verify the candidate. Preservation criteria need passing evidence
+on both versions; removal criteria need a failing original and passing candidate.
+Missing or stale manual obligations block passport readiness even if commands pass.
+Reports include per-requirement original/candidate evidence and repair requests.
+This covers declared scenarios only; manual observations remain caller supplied.
+
+See [workflow and limits](docs/preservation-passport.md) and the
+[generated example](docs/passport-example.md).
+
 ## Record manual interaction checks
 
 `unmix_inspect` returns `candidateTree`. Inspect before testing, then use
@@ -176,7 +190,7 @@ file content/modes, not browser, database, runtime or deployment state.
 - Snapshots preserve the original Git index, staged changes, source files and branch.
 - Reconstruction creates a new detached worktree; an existing destination is refused.
 - Conflicts and declared removed dependencies stop replay for explicit adaptation.
-- Verification requires at least one check; failing checks never get a success status.
+- Verification requires configured checks or a declared passport; required failures and missing evidence block passport readiness.
 - Source edits after verification make its results stale.
 - Source edits caused by check commands invalidate that verification run.
 - Binary files and executable modes are preserved by Git patch replay.
