@@ -8,7 +8,7 @@ for each task. When you remove a task, it constructs a separate Git worktree,
 replays retained changes, and hands conflicts or missing dependencies to Codex
 for adaptation.
 
-**v0.1.3 is an experimental release.** Git performs
+**v0.1.4 is an experimental release.** Git performs
 patch replay. Codex or a human performs semantic adaptation. Unmix coordinates
 that work and reports evidence. It does not guarantee preservation of all
 behavior, infer all dependencies, or automatically merge the candidate.
@@ -46,7 +46,7 @@ Replace both absolute paths with the locations on your computer:
 codex mcp add unmix -- node /absolute/unmix/bin/unmix.mjs mcp --repo /absolute/your-project
 ```
 
-Open Codex in your project and check `/mcp`. The server exposes ten tools for
+Open Codex in your project and check `/mcp`. The server exposes eleven tools for
 initializing, recording, reconstructing, inspecting, adapting, and verifying
 tasks. See [the Codex guide](docs/codex.md) for the complete workflow and a
 project instruction block. A real authenticated Codex CLI/MCP connection and
@@ -125,6 +125,23 @@ The guest check in this example must be present in the candidate before
 verification. This tool executes exactly the configured command vectors, with
 no shell interpolation. Commands are trusted project code and can have side
 effects; the worktree is **not an OS security sandbox**.
+
+## Record manual interaction checks
+
+`unmix_inspect` returns `candidateTree`. Inspect before testing, then use
+`unmix_manual_check` (CLI: `manual-check`) to record the actual observer,
+procedure and passed/failed result against that `expectedTree`. A changed tree
+is refused. Use separate IDs for independent interactions such as “Like saved”
+and “scroll position preserved”.
+
+Inspection and JSON/Markdown reports show the latest results and history in
+`manualChecks`; later candidate file changes mark prior observations `stale`.
+Rechecking appends a result for that ID. Automated checks do not refresh manual
+observations; read both sections even when the plan says `checks_passed`.
+
+See [manual-check workflow and limits](docs/manual-checks.md). Records are caller
+supplied, not authenticated proof of human actions. Freshness covers nonignored
+file content/modes, not browser, database, runtime or deployment state.
 
 ## What the prototype protects
 

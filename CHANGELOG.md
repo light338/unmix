@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.4 — 2026-10-15
+
+- Added `unmix_manual_check` MCP tool and `manual-check` CLI command following
+  TheodorNEngoy's feedback in Codex Discussion #53955.
+- Tie caller-supplied manual observations to an inspected candidate tree; refuse
+  recording if it changed before submission. Keep independent IDs and history.
+- Report stale observations after candidate changes, including after resume;
+  automatic verification cannot refresh manual results.
+- Expose manual evidence separately in inspection and JSON/Markdown reports;
+  preserve original files/HEAD/index and retain observed Git trees.
+- Inspection now includes candidateTree and untracked nonignored diff content.
+- Added six integration scenarios, CLI/MCP coverage and workflow documentation.
+- State runtime/browser/data exclusions and unauthenticated observer/evidence limits.
+
 ## 0.1.3 — 2026-10-15
 
 - Added `unmix_report` MCP tool and `report` CLI command in JSON and Markdown.

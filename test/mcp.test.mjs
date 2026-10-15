@@ -35,7 +35,7 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   assert.equal(init.result.protocolVersion, '2025-06-18');
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const discovery = (await request('tools/list')).result.tools;
-  assert.equal(discovery.length, 10);
+  assert.equal(discovery.length, 11);
   assert.equal(discovery.find(t => t.name === 'unmix_report').annotations.readOnlyHint, true);
   assert.equal((await request('ping')).result.constructor, Object);
   await tool('unmix_init');
@@ -49,7 +49,17 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   const markdown = await request('tools/call', { name: 'unmix_report', arguments: { planId: plan.planId, format: 'markdown' } });
   assert.match(markdown.result.content[0].text, /# Unmix task review/);
   assert.equal((await request('tools/call', { name: 'unmix_report', arguments: { planId: plan.planId, format: 'html' } })).result.isError, true);
-  assert.equal((await tool('unmix_inspect', { planId: plan.planId })).status, 'checks_passed');
+  const inspected = await tool('unmix_inspect', { planId: plan.planId });
+  assert.equal(inspected.status, 'checks_passed');
+  const observation = { planId: plan.planId, checkId: 'scroll-position', title: 'Scroll position',
+    procedure: 'Fixture-only observation; no real human interaction.', result: 'passed', observer: 'MCP test client',
+    note: 'Synthetic API test.', expectedTree: inspected.candidateTree };
+  assert.equal(discovery.find(t => t.name === 'unmix_manual_check').annotations.readOnlyHint, false);
+  assert.equal((await tool('unmix_manual_check', observation)).state, 'passed');
+  fs.writeFileSync(path.join(plan.candidate, 'later.txt'), 'later adaptation');
+  assert.equal((await tool('unmix_report', { planId: plan.planId })).manualChecks.state, 'stale');
+  assert.equal((await request('tools/call', { name: 'unmix_manual_check', arguments: observation })).result.isError, true);
+  assert.equal((await request('tools/call', { name: 'unmix_manual_check', arguments: { ...observation, result: 'maybe' } })).result.isError, true);
   const invalid = await request('tools/call', { name: 'unmix_begin', arguments: { taskId: 'x', title: 'x', intent: 'x', repo: '/' } });
   assert.equal(invalid.result.isError, true);
   assert.equal((await request('tools/call', { name: 'missing' })).error.code, -32602);

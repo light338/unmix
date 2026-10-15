@@ -41,6 +41,13 @@ successful resume they become part of that task's recorded resulting patch.
 vectors and any recorded results. Generating a report cannot make checks pass.
 Edits after verification make the reported checks stale.
 
+## Manual interaction observations (v0.1.4)
+
+`manualChecks` separately lists latest observations, full history and freshness
+against `candidateTree`. File changes mark prior results stale; automated checks
+do not refresh them. A plan's `checks_passed` status only covers executable checks:
+read `manualChecks` too. See [recording workflow and limits](manual-checks.md).
+
 ## Interpret the result carefully
 
 These are historical replay steps, not semantic ownership of final lines. If task
