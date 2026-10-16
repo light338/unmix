@@ -147,3 +147,11 @@ See [generated stages](passport-example.md): passing commands with missing manua
 checks are blocked; a lost payment behavior generates a failed obligation; restoring
 implementation produces readiness. This is explicitly an authored fixture with
 synthetic manual observations, not a new live-agent or human/UI test.
+
+## Manual context enforcement (v0.1.9)
+
+See [browser/account conditions](manual-context.md). After declaring context in
+either phase, manual obligations require fresh contextual observations in both
+versions with comparable conditions. Reports expose `contextComparison` and
+`context_mismatch`; legacy plans without declarations explicitly remain limited
+to file-based evidence (`contextCoverage:"not_declared"`).
