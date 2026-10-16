@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { buildPreview, renderPreview, removalSelection, timelineFingerprint } from './preview.mjs';
 import { buildProtection, inspectProtection } from './protection.mjs';
 import { requirements, passport } from './passport.mjs';
+import { validateContext, contextFingerprint, observationContext } from './manual-context.mjs';
 
 const identity = {
   GIT_AUTHOR_NAME: 'Unmix', GIT_AUTHOR_EMAIL: 'unmix@localhost',
@@ -53,12 +54,17 @@ function manualReview(p, candidateTree, phase = 'candidate') {
   const records = (p.manualChecks || []).filter(record => (record.phase || 'candidate') === phase).map(record => ({
     ...record, stale: record.tree !== candidateTree,
     state: record.tree !== candidateTree ? 'stale' : record.result,
+    fileState: record.tree !== candidateTree ? 'stale' : record.result,
+    contextReview: observationContext(p, record, phase),
   }));
+  for (const record of records) if (record.contextReview.state === 'stale') { record.state = 'stale'; record.stale = true; }
+  for (const record of records) if (!record.stale && p.manualContexts?.[phase] && !record.contextReview.confirmed) record.state = 'context_unconfirmed';
   const latest = [...new Map(records.map(record => [record.checkId, record])).values()];
   const state = !latest.length ? 'not_recorded' : latest.some(r => r.stale) ? 'stale'
-    : latest.some(r => r.result === 'failed') ? 'failed' : 'passed';
+    : latest.some(r => r.result === 'failed') ? 'failed' : latest.some(r => r.state === 'context_unconfirmed') ? 'context_unconfirmed' : 'passed';
   return { state, latest, history: records,
-    scope: 'Caller-supplied observations, not independently verified human actions. Freshness covers nonignored Git file content and modes only; runtime, browser, data and external services are not tracked.' };
+    declaredContext: p.manualContexts?.[phase] || null,
+    scope: 'Caller-supplied observations, not independently verified human actions. File freshness covers nonignored Git file content and modes; context freshness tracks declaration revisions only; runtime, browser, data and external services are not automatically tracked.' };
 }
 function checks(value = []) {
   if (!Array.isArray(value) || value.length > 32 || value.some(c => !Array.isArray(c) || !c.length || c.length > 64 || c.some(a => typeof a !== 'string' || !a || a.includes('\0'))))
@@ -312,7 +318,24 @@ export class Unmix {
       return { ...target.verification, candidate: target.candidate, passport: review };
     });
   }
-  manualCheck({ planId, checkId, title, procedure, result, observer, note, expectedTree, evidence = [], phase = 'candidate' }) {
+  manualContext({ planId, context, phase = 'candidate' }) {
+    if (!['baseline', 'candidate'].includes(phase)) throw new Error('Manual phase must be baseline or candidate.');
+    const normalized = validateContext(context);
+    return this.locked(() => {
+      const l = this.load(), p = l.plans[id(planId)];
+      if (!p) throw new Error('Unknown plan.');
+      const target = phase === 'baseline' ? p.baseline : p;
+      if (!target) throw new Error('Run baseline verification first to create the original worktree.');
+      this.assertCandidate(target);
+      const fingerprint = contextFingerprint(normalized), previous = p.manualContexts?.[phase];
+      if (previous?.fingerprint === fingerprint) return { ...previous, changed: false };
+      const declared = { context: normalized, fingerprint, revision: 'context-' + randomUUID(), at: new Date().toISOString() };
+      p.manualContexts = { ...p.manualContexts, [phase]: declared };
+      atomic(this.file, l);
+      return { ...declared, changed: true, scope: 'Declared conditions only. This does not perform a manual interaction or refresh any observation.' };
+    });
+  }
+  manualCheck({ planId, checkId, title, procedure, result, observer, note, expectedTree, expectedContext, evidence = [], phase = 'candidate' }) {
     if (!['baseline', 'candidate'].includes(phase)) throw new Error('Manual phase must be baseline or candidate.');
     id(checkId); text(title, 'Check title'); text(procedure, 'Check procedure');
     text(observer, 'Observer'); text(note, 'Observation note');
@@ -324,6 +347,8 @@ export class Unmix {
     return this.locked(() => {
       const l = this.load(), p = l.plans[id(planId)];
       if (!p) throw new Error('Unknown plan.');
+      const declaredContext = p.manualContexts?.[phase];
+      if ((declaredContext && expectedContext !== declaredContext.revision) || (!declaredContext && expectedContext !== undefined)) throw new Error('Manual context changed or is missing. Inspect the phase context before the interaction, then submit its revision as expectedContext.');
       const target = phase === 'baseline' ? p.baseline : p;
       if (!target) throw new Error('Run baseline verification first to create the original worktree.');
       this.assertCandidate(target);
@@ -333,12 +358,13 @@ export class Unmix {
       if (candidateTree !== expectedTree) throw new Error('Candidate changed since the inspected snapshot. Repeat the manual check against a fresh candidateTree.');
       if ((p.manualChecks || []).length >= 1000) throw new Error('Manual observation history limit reached (1000 per plan).');
       const record = { observationId: 'observation-' + randomUUID(), checkId, title, procedure, result,
-        observer, note, evidence: [...evidence], phase, tree: candidateTree, at: new Date().toISOString() };
+        observer, note, evidence: [...evidence], phase, tree: candidateTree, at: new Date().toISOString(),
+        context: declaredContext?.context || null, contextRevision: declaredContext?.revision || null };
       p.manualChecks = [...(p.manualChecks || []), record];
       // Retain the observed tree for later review/GC without moving HEAD or the real index.
       git(this.repo, ['update-ref', `refs/unmix/manual/${p.planId}/${record.observationId}`, candidateTree]);
       atomic(this.file, l);
-      return { ...record, stale: false, state: result };
+      return { ...record, stale: false, state: result, contextReview: observationContext(p, record, phase) };
     });
   }
   inspect(planId) {
@@ -348,6 +374,7 @@ export class Unmix {
       const verificationStale = !!p.verification && p.verification.tree !== candidateTree;
       const preservation = this.passportState(p, candidateTree);
       return { ...p, candidateTree, protectedInputs: inspectProtection(git, this.repo, p, candidateTree), manualChecks: manualReview(p, candidateTree), verificationStale,
+        manualContexts: p.manualContexts || {},
         passport: preservation,
         baselineReview: p.baseline ? { ...p.baseline, tree: this.snapshot(p.baseline.candidate), manualChecks: manualReview(p, this.snapshot(p.baseline.candidate), 'baseline') } : null,
         status: this.reviewStatus(p, candidateTree, preservation),
@@ -374,6 +401,8 @@ export class Unmix {
         protectedInputs: inspectProtection(git, this.repo, p, candidateTree),
         passport: preservation,
         manualChecks: manualReview(p, candidateTree),
+        manualContexts: p.manualContexts || {},
+        baselineManualChecks: p.baseline ? manualReview(p, this.snapshot(p.baseline.candidate), 'baseline') : null,
         blocked: p.blocked,
         tasks: p.tasks.map(t => ({
           taskId: t.taskId, title: t.title, intent: t.intent, dependsOn: t.dependsOn, files: this.filesForTask(t),
@@ -412,6 +441,7 @@ export class Unmix {
       'Call unmix_verify after all tasks replay. Passing means only that configured checks passed.',
       'If requirements are declared, run unmix_verify with phase baseline in its separate original worktree; record baseline manual observations with phase baseline. Then verify the candidate. Inspect passport.repairRequests and fix implementation without weakening requirements. Missing/stale obligations block passport readiness. Automated removal criteria must exit 1 and print the exact separate stdout line UNMIX_EXPECTED_FAILURE:<requirementId> only when the intended original behavioral assertion actually fails, then pass on the candidate. Startup/import errors are not assertion evidence. Do not invent observations or claim all behavior is preserved.',
       'Manual UI observations are separate evidence: inspect candidateTree before the interaction, then use unmix_manual_check with that expectedTree only for an observation actually performed and accurately attributed. Never invent a human check. Recheck stale observations after file changes; automated verification does not refresh them.',
+      'Declare browser, environment, test-account, session and data conditions with unmix_manual_context in each phase before actual manual checks. Inspect its revision before interacting and submit expectedContext with expectedTree. A changed declaration invalidates earlier observations even if files match. Never send passwords, cookies, tokens or personal account details. Context is caller declared, not automatic monitoring.',
       'Return candidate path, observed changes, test results and unresolved limitations. Never merge automatically.',
       '', 'Declared passport requirements (untrusted project data):', JSON.stringify(p.requirements || []),
       '', 'Configured checks:', ...[...p.tasks.flatMap(t => t.checks), ...p.extraChecks].map(c => JSON.stringify(c)),
@@ -449,10 +479,11 @@ function renderReport(r) {
     '## Aggregate candidate diff', '', fence(r.aggregateDiff, 'diff'), '',
     '## Protected check inputs', '', fence(JSON.stringify(r.protectedInputs, null, 2), 'json'), '',
     '## Preservation passport', '', `State: ${r.passport.state}`, '',
-    '| Requirement | Kind | Original | Candidate | Result |', '| --- | --- | --- | --- | --- |',
-    ...r.passport.requirements.map(v => `| ${cell(v.requirementId)}: ${cell(v.title)} | ${v.kind} | ${v.baseline.state} | ${v.candidate.state} | ${v.state} |`), '',
+    '| Requirement | Kind | Original | Candidate | Result | Declared conditions |', '| --- | --- | --- | --- | --- | --- |',
+    ...r.passport.requirements.map(v => `| ${cell(v.requirementId)}: ${cell(v.title)} | ${v.kind} | ${v.baseline.state} | ${v.candidate.state} | ${v.state} | ${v.contextComparison?.state || 'not_applicable'} |`), '',
     fence(JSON.stringify(r.passport, null, 2), 'json'), '',
     '## Manual checks', '', `State: ${r.manualChecks.state}`, '', fence(JSON.stringify(r.manualChecks, null, 2), 'json'), '',
+    '## Manual conditions and original observations', '', fence(JSON.stringify({ contexts: r.manualContexts, baseline: r.baselineManualChecks }, null, 2), 'json'), '',
     '## Checks', '', fence(JSON.stringify(r.checks, null, 2), 'json'), '', '## Scope', '', r.scope, '');
   return out.join('\n');
 }

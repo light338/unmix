@@ -8,7 +8,7 @@ for each task. When you remove a task, it constructs a separate Git worktree,
 replays retained changes, and hands conflicts or missing dependencies to Codex
 for adaptation.
 
-**v0.1.8 is an experimental release.** Git performs
+**v0.1.9 is an experimental release.** Git performs
 patch replay. Codex or a human performs semantic adaptation. Unmix coordinates
 that work and reports evidence. It does not guarantee preservation of all
 behavior, infer all dependencies, or automatically merge the candidate.
@@ -46,7 +46,7 @@ Replace both absolute paths with the locations on your computer:
 codex mcp add unmix -- node /absolute/unmix/bin/unmix.mjs mcp --repo /absolute/your-project
 ```
 
-Open Codex in your project and check `/mcp`. The server exposes twelve tools for
+Open Codex in your project and check `/mcp`. The server exposes thirteen tools for
 initializing, recording, reconstructing, inspecting, adapting, and verifying
 tasks. See [the Codex guide](docs/codex.md) for the complete workflow and a
 project instruction block. A real authenticated Codex CLI/MCP connection and
@@ -186,6 +186,17 @@ observations; read both sections even when the plan says `checks_passed`.
 See [manual-check workflow and limits](docs/manual-checks.md). Records are caller
 supplied, not authenticated proof of human actions. Freshness covers nonignored
 file content/modes, not browser, database, runtime or deployment state.
+
+## Record browser and account conditions
+
+Use `unmix_manual_context` before manual interactions to declare browser/version,
+environment, test-account/auth state, session and data labels for each phase.
+Inspect its revision and the file tree before interacting, then submit both as
+`expectedContext` and `expectedTree`. Changed declarations invalidate prior manual
+observations; reports compare original/candidate conditions and expose differences.
+This is caller-declared evidence, not automatic browser monitoring. Never submit
+cookies, tokens, passwords or private account details. See
+[workflow, compatibility and limits](docs/manual-context.md).
 
 ## What the prototype protects
 

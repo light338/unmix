@@ -74,6 +74,7 @@ existing instructions. Unmix does not automatically modify agent configuration.
 | Review by task before checks | `unmix_report` | Original/result patches, blocker history and pending work; JSON or Markdown |
 | Compare passport criteria on the original | `unmix_verify` with `phase:"baseline"` | Separate recorded-original worktree, command evidence and baseline manual review |
 | Run behavioral checks | `unmix_verify` | Per-command results |
+| Declare current manual conditions | `unmix_manual_context` | Browser, environment, test account/session/data labels; declaration only |
 | Record an actual manual observation | `unmix_manual_check` | Caller-supplied result tied to the pre-check candidateTree; see [manual checks](manual-checks.md) |
 | Review final state | `unmix_inspect` | Candidate tree, difference, automated freshness and manual observations |
 
@@ -130,3 +131,7 @@ Official references:
 - https://developers.openai.com/codex/cli/reference
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle
+
+For manual requirements, declare phase contexts before interacting, inspect their
+revisions, and submit `expectedContext`. Changed or incomparable conditions block
+manual passport readiness after opting in. See [manual context](manual-context.md).

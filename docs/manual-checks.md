@@ -88,3 +88,10 @@ editing during a manual review.
 Tests exercise storage, stale detection, replay, CLI and real stdio MCP calls
 with explicitly authored fixture observations. They are not user testing of
 Turnfeed or evidence of independent human adoption.
+
+## Browser/account conditions (v0.1.9)
+
+Use [manual context declarations](manual-context.md) before interacting.
+After a declaration, `expectedContext` is required alongside `expectedTree`.
+File freshness and declared-condition freshness are shown separately; older
+records without context remain explicitly unconfirmed about external conditions.

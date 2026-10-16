@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.9 — 2026-10-16
+
+- Add phase-specific manual context declarations for browser, environment,
+  test-account/authentication, session and data conditions.
+- Bind observations to an inspected context revision; changed declarations make
+  earlier manual results stale independently of Git files.
+- Compare original/candidate conditions in passports, expose differences and
+  block contextual manual requirements when conditions are missing or differ.
+- Keep legacy file-only evidence explicit; do not infer automatic external state.
+
 ## 0.1.8 — 2026-10-16
 
 - Fix non-UTF8 patch corruption and isolate machine patches from Git display
