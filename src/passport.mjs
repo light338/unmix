@@ -1,4 +1,5 @@
 // Declared obligations, not inferred completeness or a security boundary.
+import { observationContext, compareContexts } from './manual-context.mjs';
 export function expectedFailureMarker(requirementId) {
   if (typeof requirementId !== 'string' || !/^[a-z][a-z0-9-]{0,63}$/.test(requirementId)) throw new Error('Expected failure marker requires a valid requirement ID.');
   return `UNMIX_EXPECTED_FAILURE:${requirementId}`;
@@ -27,9 +28,13 @@ function evidence(p, requirement, phase, tree) {
   if (!requirement.command) {
     const record = (p.manualChecks || []).filter(v => (v.phase || 'candidate') === phase && v.checkId === requirement.checkId).at(-1);
     if (!record) return { state: 'not_checked' };
-    if (record.tree !== tree) return { state: 'stale', observationId: record.observationId };
-    if (record.procedure !== requirement.procedure) return { state: 'not_checked', reason: 'procedure_mismatch', observationId: record.observationId };
-    return { state: record.result, observationId: record.observationId, observer: record.observer };
+    const contextReview = observationContext(p, record, phase);
+    const metadata = { observationId: record.observationId, observer: record.observer, contextReview };
+    if (record.tree !== tree) return { ...metadata, state: 'stale' };
+    if (contextReview.state === 'stale') return { ...metadata, state: 'stale', reason: 'manual_context_changed' };
+    if (record.procedure !== requirement.procedure) return { ...metadata, state: 'not_checked', reason: 'procedure_mismatch' };
+    if ((p.manualContexts?.baseline || p.manualContexts?.candidate) && !contextReview.confirmed) return { ...metadata, state: 'not_checked', reason: 'context_unconfirmed' };
+    return { ...metadata, state: record.result };
   }
   const verification = phase === 'baseline' ? p.baseline?.verification : p.verification;
   if (!verification) return { state: 'not_checked' };
@@ -48,21 +53,25 @@ export function passport(p, candidateTree, baselineTree) {
   const rows = p.requirements.map(r => {
     const baseline = evidence(p, r, 'baseline', baselineTree), candidate = evidence(p, r, 'candidate', candidateTree);
     const expectedBaseline = r.kind === 'preserve' ? 'passed' : 'failed';
-    const state = [baseline.state, candidate.state].includes('stale') ? 'stale'
+    let state = [baseline.state, candidate.state].includes('stale') ? 'stale'
       : baseline.state === 'not_checked' || candidate.state === 'not_checked' ? 'not_checked'
       : baseline.state === 'error' || candidate.state === 'error' ? 'error'
       : baseline.state !== expectedBaseline ? (r.kind === 'preserve' ? 'pre_existing_failure' : 'removal_not_demonstrated')
       : candidate.state !== 'passed' ? 'failed' : 'passed';
+    const contextComparison = r.command ? null : compareContexts(baseline.contextReview?.context, candidate.contextReview?.context);
+    if (!r.command && state === 'passed' && (p.manualContexts?.baseline || p.manualContexts?.candidate) && contextComparison.state !== 'matching') state = contextComparison.state === 'different' ? 'context_mismatch' : 'not_checked';
     return { ...r, state, baseline, candidate, expectedBaseline,
+      contextComparison,
       expectedFailureMarker: r.kind === 'remove' && r.command ? expectedFailureMarker(r.requirementId) : null };
   });
   const automated = p.verification;
   const automatedFresh = !!automated && automated.tree === candidateTree && automated.checksPassed;
   const ready = !p.blocked && p.cursor === p.tasks.length && automatedFresh && rows.every(r => r.state === 'passed');
   return { state: ready ? 'ready' : 'blocked', ready, baselineRevision: p.baselineRevision,
+    contextCoverage: p.manualContexts?.baseline || p.manualContexts?.candidate ? 'declared' : 'not_declared',
     baselinePath: p.baseline?.candidate || null, requirements: rows,
     repairRequests: rows.filter(r => r.state !== 'passed').map(r => ({ requirementId: r.requirementId, state: r.state, command: r.command || null, checkId: r.checkId || null,
-      reason: r.baseline.reason || r.candidate.reason || null, expectedFailureMarker: r.expectedFailureMarker,
-      action: r.baseline.reason === 'missing_failure_marker' ? `The original criterion exited 1 without ${r.expectedFailureMarker}. Ensure the same criterion exists and runs in the original; emit the marker as a separate stdout line only when its intended behavioral assertion fails, never for startup/import errors. Prepare a new plan if the criterion must change.` : r.state === 'pre_existing_failure' ? 'Investigate the failing original scenario; do not attribute it to reconstruction.' : r.state === 'removal_not_demonstrated' ? 'The scenario already passed on the original; review the removal criterion.' : 'Inspect evidence, repair candidate implementation or perform the missing/stale check. Keep requirements and protected inputs unchanged.' })),
+      reason: r.state === 'context_mismatch' ? 'manual_conditions_differ' : r.baseline.reason || r.candidate.reason || null, expectedFailureMarker: r.expectedFailureMarker,
+      action: r.state === 'context_mismatch' ? 'Review the displayed browser/account/session/data differences. Repeat actual observations under intended comparable conditions; do not relabel old results as equivalent.' : r.baseline.reason === 'missing_failure_marker' ? `The original criterion exited 1 without ${r.expectedFailureMarker}. Ensure the same criterion exists and runs in the original; emit the marker as a separate stdout line only when its intended behavioral assertion fails, never for startup/import errors. Prepare a new plan if the criterion must change.` : r.state === 'pre_existing_failure' ? 'Investigate the failing original scenario; do not attribute it to reconstruction.' : r.state === 'removal_not_demonstrated' ? 'The scenario already passed on the original; review the removal criterion.' : 'Inspect evidence, repair candidate implementation or perform the missing/stale check. Keep requirements and protected inputs unchanged.' })),
     scope: 'Declared scenarios only. Removal needs a failing original and passing candidate for the same criterion (automated original exit 1 plus its exact expected-failure stdout marker, not a launch/timeout error). The marker is an explicit assertion contract, not independent proof of its correctness. Manual records are caller supplied. Freshness covers nonignored Git files/modes, not runtime, browser, database or external services. Not a semantic proof or security sandbox.' };
 }
