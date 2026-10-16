@@ -35,7 +35,7 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   assert.equal(init.result.protocolVersion, '2025-06-18');
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const discovery = (await request('tools/list')).result.tools;
-  assert.equal(discovery.length, 12);
+  assert.equal(discovery.length, 13);
   assert.equal(discovery.find(t => t.name === 'unmix_report').annotations.readOnlyHint, true);
   assert.equal((await request('ping')).result.constructor, Object);
   await tool('unmix_init');
@@ -80,6 +80,16 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   assert.equal(originalReview.phase, 'baseline');
   assert.equal((await request('tools/call', { name: 'unmix_verify', arguments: { planId: passportPlan.planId, phase: 'bad' } })).result.isError, true);
   assert.equal((await request('tools/call', { name: 'unmix_prepare', arguments: { remove: ['drop'], instruction: 'Bad', requirements: [{ ...obligation, command: [] }] } })).result.isError, true);
+  const context = { browser: 'FixtureBrowser', browserVersion: '1', environment: 'local', authState: 'signed_out', session: 'fresh-session', dataState: 'seed-v1' };
+  const declared = await tool('unmix_manual_context', { planId: passportPlan.planId, context });
+  assert.equal(declared.changed, true);
+  assert.equal(discovery.find(t => t.name === 'unmix_manual_context').annotations.readOnlyHint, false);
+  const contextInspection = await tool('unmix_inspect', { planId: passportPlan.planId });
+  assert.equal(contextInspection.manualContexts.candidate.revision, declared.revision);
+  assert.equal(contextInspection.passport.ready, false);
+  assert.equal((await request('tools/call', { name: 'unmix_manual_check', arguments: { ...observation, planId: passportPlan.planId, expectedTree: contextInspection.candidateTree } })).result.isError, true);
+  await tool('unmix_manual_check', { ...observation, planId: passportPlan.planId, expectedTree: contextInspection.candidateTree, expectedContext: declared.revision });
+  assert.equal((await request('tools/call', { name: 'unmix_manual_context', arguments: { planId: passportPlan.planId, context: { ...context, cookies: 'forbidden-field' } } })).result.isError, true);
   const invalid = await request('tools/call', { name: 'unmix_begin', arguments: { taskId: 'x', title: 'x', intent: 'x', repo: '/' } });
   assert.equal(invalid.result.isError, true);
   assert.equal((await request('tools/call', { name: 'missing' })).error.code, -32602);
