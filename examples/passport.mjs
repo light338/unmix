@@ -25,10 +25,11 @@ export function passportExample(root) {
     { requirementId: 'receipt', title: 'Receipt export retained', kind: 'preserve', command: ['node', '-e', "process.exit(require('fs').existsSync('receipt.txt')?0:1)"] }, manual,
   ] });
   app.verify({ planId: plan.planId, phase: 'baseline' });
+  for (const phase of ['baseline', 'candidate']) app.manualContext({ planId: plan.planId, phase, context: { browser: 'FixtureBrowser', browserVersion: '1', environment: 'authored-fixture', authState: 'signed_out', session: 'synthetic-session-v1', dataState: 'seed-v1' } });
   const missingManual = app.verify({ planId: plan.planId });
   const inspected = app.inspect(plan.planId);
   for (const phase of ['baseline', 'candidate']) app.manualCheck({ planId: plan.planId, phase, checkId: manual.checkId, title: manual.title, procedure: manual.procedure, result: 'passed',
-    expectedTree: phase === 'baseline' ? inspected.baselineReview.tree : inspected.candidateTree, observer: 'Authored fixture, not a human', note: 'Synthetic evidence to demonstrate the API; no browser or scroll behavior was tested.' });
+    expectedTree: phase === 'baseline' ? inspected.baselineReview.tree : inspected.candidateTree, expectedContext: inspected.manualContexts[phase].revision, observer: 'Authored fixture, not a human', note: 'Synthetic evidence to demonstrate the API; no browser or scroll behavior was tested.' });
   fs.writeFileSync(path.join(plan.candidate, 'app.json'), JSON.stringify({ registration: false, payment: false }));
   const broken = app.verify({ planId: plan.planId });
   fs.writeFileSync(path.join(plan.candidate, 'app.json'), JSON.stringify({ registration: false, payment: true }));
