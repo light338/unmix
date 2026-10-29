@@ -1,0 +1,64 @@
+diff --git a/tests/test_cli_quiet.py b/tests/test_cli_quiet.py
+new file mode 100644
+index 0000000..b824dd3
+--- /dev/null
++++ b/tests/test_cli_quiet.py
+@@ -0,0 +1,16 @@
++import json, subprocess, sys, tempfile, unittest, zipfile
++from pathlib import Path
++
++class QuietTests(unittest.TestCase):
++    def test_quiet_success_and_error(self):
++        with tempfile.TemporaryDirectory() as d:
++            artifact=Path(d)/'sample.zip'
++            with zipfile.ZipFile(artifact,'w') as z: z.writestr('app.py','print(1)')
++            r=subprocess.run([sys.executable,'-m','ziptrial','inspect',str(artifact),'--quiet'],capture_output=True,text=True)
++            self.assertEqual(r.returncode,0,r.stderr)
++            self.assertEqual(r.stdout,'')
++            artifact.write_bytes(b'not an archive')
++            r=subprocess.run([sys.executable,'-m','ziptrial','inspect',str(artifact),'--quiet'],capture_output=True,text=True)
++            self.assertEqual(r.returncode,2)
++            self.assertIn('ZipTrial:',r.stderr)
++            self.assertEqual(r.stdout,'')
+diff --git a/ziptrial/__main__.py b/ziptrial/__main__.py
+index fef9397..28dbe39 100644
+--- a/ziptrial/__main__.py
++++ b/ziptrial/__main__.py
+@@ -6,6 +6,11 @@ from . import __version__
+ from .core import Archive, TrialError, manifest_check, markdown, run_trial
+ 
+ 
++def emit_json(value, quiet=False):
++    if not quiet:
++        print(json.dumps(value, indent=2))
++
++
+ def main():
+     parser = argparse.ArgumentParser(description="Inspect release archives or run trusted smoke checks against the downloaded bytes.")
+     parser.add_argument("--version", action="version", version="ZipTrial " + __version__)
+@@ -13,6 +18,7 @@ def main():
+     for command in ("inspect", "run"):
+         p = sub.add_parser(command)
+         p.add_argument("archive")
++        p.add_argument("--quiet", action="store_true", help="Suppress successful JSON output")
+         p.add_argument("--sha256", help="Expected SHA-256 from a trusted source (optional)")
+         if command == "run":
+             p.add_argument("--manifest", required=True, help="External JSON command manifest you trust")
+@@ -20,7 +26,7 @@ def main():
+     args = parser.parse_args()
+     try:
+         if args.command == "inspect":
+-            print(json.dumps(Archive(args.archive, args.sha256).inspect(), indent=2))
++            emit_json(Archive(args.archive, args.sha256).inspect(), quiet=args.quiet)
+             return 0
+         output = Path(args.output).resolve()
+         if output.exists():
+@@ -30,7 +36,7 @@ def main():
+         output.mkdir(parents=True, exist_ok=False)
+         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+         (output / "review.md").write_text(markdown(report), encoding="utf-8")
+-        print(json.dumps({"status": report["status"], "checks": [{"id": c["id"], "status": c["status"]} for c in report["checks"]], "missing_files": report["missing_files"], "report": str(output / "review.md")}, indent=2))
++        emit_json({"status": report["status"], "checks": [{"id": c["id"], "status": c["status"]} for c in report["checks"]], "missing_files": report["missing_files"], "report": str(output / "review.md")}, quiet=args.quiet)
+         return 0 if report["status"] == "passed" else 1
+     except (TrialError, OSError, ValueError, TypeError) as error:
+         print("ZipTrial: " + str(error), file=sys.stderr)

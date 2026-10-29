@@ -135,3 +135,10 @@ Official references:
 For manual requirements, declare phase contexts before interacting, inspect their
 revisions, and submit `expectedContext`. Changed or incomparable conditions block
 manual passport readiness after opting in. See [manual context](manual-context.md).
+
+## Lower-friction recording (v0.2.0)
+
+After init on a clean project, use `unmix_checkpoint` with a title after each
+coherent completed edit, instead of mandatory begin/finish. Supply checks and
+dependencies when known; a missing declaration is not proof of independence.
+Always verify runtime behavior after reconstruction. See [checkpoint](checkpoint.md).

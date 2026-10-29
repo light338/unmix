@@ -52,7 +52,7 @@ test('CLI keeps help and valid JSON/file input behavior', t => {
   const { root, repo } = fixture(t);
   const help = cli(['--help'], root);
   assert.equal(help.status, 0); assert.equal(help.stderr, '');
-  assert.match(help.stdout, /Commands: init, begin, finish, timeline, preview/);
+  assert.match(help.stdout, /Commands:.*checkpoint.*preview/);
   const input = path.join(root, 'request with spaces.json'); fs.writeFileSync(input, '{}');
   const initialized = cli(['init', '--repo', repo, '--input', input], root);
   assert.equal(initialized.status, 0, initialized.stderr);

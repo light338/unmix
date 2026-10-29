@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-29",
+  "sourceRepository": "https://github.com/light338/ziptrial",
+  "sourceCommit": "94057accdb7b736f0d8c5d457ead6b7b1817ca2d",
+  "scope": "Maintainer-controlled, staged feature-removal pilot on an existing published repository. Not an independent user trial or controlled performance benchmark. Feature implementations and tests are authored; reconstruction repairs are produced by the installed Codex CLI. One run per reconstruction workflow, Unmix first. No general speedup claim.",
+  "recording": {
+    "checkpoints": 2,
+    "oldBeginFinishCalls": 4,
+    "newCheckpointCalls": 2,
+    "checkpointMs": [
+      76.22895799999998,
+      70.84549999999996
+    ],
+    "scope": "Core API wall time only; editing, setup and human effort are excluded."
+  },
+  "originalUnchanged": true,
+  "unmix": {
+    "model": {
+      "exitCode": 0,
+      "modelMs": 64894.54566599999
+    },
+    "reconstructionMs": 65023.731457999995,
+    "hostCompletionMs": 2069.9913749999996,
+    "hostIntervention": "Maintainer staged the already agent-written repair and called resume/verify after the agent sandbox/approval policy blocked those steps. This is not a fully unattended run.",
+    "totalMeasuredMs": 67093.72283299999,
+    "audit": {
+      "retainedTestsUnchanged": true,
+      "compactTestRemoved": true,
+      "compactOptionRemoved": true,
+      "quietOptionRetained": true,
+      "tests": {
+        "ok": true,
+        "code": 0,
+        "stdout": "",
+        "stderr": ".................\n----------------------------------------------------------------------\nRan 17 tests in 1.838s\n\nOK\n"
+      }
+    },
+    "verifiedAfterHostCompletion": true,
+    "mcpCalls": [
+      "unmix_report",
+      "unmix_codex_prompt",
+      "unmix_resume",
+      "unmix_report"
+    ]
+  },
+  "plainGit": {
+    "model": {
+      "exitCode": 0,
+      "modelMs": 48398.797542
+    },
+    "reconstructionMs": 48418.54370800001,
+    "hostCompletionMs": 6.846833000000061,
+    "hostIntervention": "Maintainer staged the already agent-written resolution because sandbox index writes were unavailable.",
+    "totalMeasuredMs": 48425.390541000015,
+    "audit": {
+      "retainedTestsUnchanged": true,
+      "compactTestRemoved": true,
+      "compactOptionRemoved": true,
+      "quietOptionRetained": true,
+      "tests": {
+        "ok": true,
+        "code": 0,
+        "stdout": "",
+        "stderr": ".................\n----------------------------------------------------------------------\nRan 17 tests in 1.806s\n\nOK\n"
+      }
+    }
+  },
+  "independentCliOracle": {
+    "bothPassed": true,
+    "cases": [
+      "default pretty JSON",
+      "quiet inspection",
+      "compact removed",
+      "quiet run retains report files",
+      "error diagnostics"
+    ],
+    "scope": "Maintainer-run external assertion script, not an independent human trial."
+  },
+  "failedInitialAttempt": "Initial CLI launch inside the outer sandbox failed before model execution. Preserved locally; excluded from successful-run timings."
+}

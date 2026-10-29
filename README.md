@@ -8,7 +8,7 @@ for each task. When you remove a task, it constructs a separate Git worktree,
 replays retained changes, and hands conflicts or missing dependencies to Codex
 for adaptation.
 
-**v0.1.9 is an experimental release.** Git performs
+**v0.2.0 is an experimental release.** Git performs
 patch replay. Codex or a human performs semantic adaptation. Unmix coordinates
 that work and reports evidence. It does not guarantee preservation of all
 behavior, infer all dependencies, or automatically merge the candidate.
@@ -46,7 +46,7 @@ Replace both absolute paths with the locations on your computer:
 codex mcp add unmix -- node /absolute/unmix/bin/unmix.mjs mcp --repo /absolute/your-project
 ```
 
-Open Codex in your project and check `/mcp`. The server exposes thirteen tools for
+Open Codex in your project and check `/mcp`. The server exposes fourteen tools for
 initializing, recording, reconstructing, inspecting, adapting, and verifying
 tasks. See [the Codex guide](docs/codex.md) for the complete workflow and a
 project instruction block. A real authenticated Codex CLI/MCP connection and
@@ -68,6 +68,25 @@ If you try it, open a **First-use report** issue with the behavior you wanted to
 remove, what you wanted to retain and whether the candidate worked. Successful
 reports and failing cases both help establish where this tool is useful. Never
 include private source, credentials or personal data in a public report.
+
+## Record after editing, with one checkpoint
+
+Initialize a clean project before the first edit, work normally, then record a
+completed chunk with one command:
+
+```sh
+node /absolute/unmix/bin/unmix.mjs checkpoint --repo /absolute/project --title "Guest checkout"
+```
+
+The ID and intent default automatically. This reduces recording calls from two
+(begin/finish) to one per completed chunk; it does not automatically record edits,
+guess dependencies or split unrelated work. Add explicit checks in JSON or at
+prepare time. A cleanly applied patch is only ready for checks, never proof the
+behavior survived. See [checkpoint workflow and limits](docs/checkpoint.md).
+
+A [measured ZipTrial pilot](docs/pilot-ziptrial.md) compares actual Codex repairs
+through Unmix MCP and ordinary Git. Both passed; Git was faster in this single
+maintainer run, and sandbox restrictions required host completion in both workflows.
 
 ## Record and reconstruct
 
