@@ -143,6 +143,23 @@ export class Unmix {
       return t;
     });
   }
+  checkpoint({ title, intent = title, taskId = 'task-' + randomUUID().slice(0, 8), dependsOn = [], checks: commands = [] }) {
+    id(taskId); text(title, 'Title'); text(intent, 'Intent'); checks(commands);
+    return this.locked(() => {
+      const l = this.load();
+      if (l.active) throw new Error(`Task ${l.active.taskId} is still active. Finish it before creating a checkpoint.`);
+      if (l.tasks.some(t => t.taskId === taskId)) throw new Error('Task ID already exists.');
+      if (!Array.isArray(dependsOn) || dependsOn.some(d => !l.tasks.some(t => t.taskId === d))) throw new Error('Dependencies must reference finished tasks.');
+      const before = l.tasks.at(-1)?.after || l.base;
+      const after = this.snapshot(this.repo, before, `Unmix checkpoint: ${taskId}\n\n${intent}`);
+      if (git(this.repo, ['rev-parse', `${after}^{tree}`]) === git(this.repo, ['rev-parse', `${before}^{tree}`])) throw new Error('Checkpoint has no file changes.');
+      const task = { taskId, title, intent, dependsOn: [...new Set(dependsOn)], checks: commands, before, after, recordingMode: 'checkpoint' };
+      task.files = this.filesForTask(task);
+      git(this.repo, ['update-ref', `refs/unmix/tasks/${taskId}`, after]);
+      l.tasks.push(task); atomic(this.file, l);
+      return task;
+    });
+  }
   filesForTask(task) {
     return git(this.repo, ['diff', ...fileOptions, task.before, task.after]).split('\0').filter(Boolean);
   }

@@ -11,6 +11,7 @@ const manualContext = schema({ browser: contextString, browserVersion: contextSt
 const tools = [
   ['unmix_init', 'Initialize task recording in a clean Git repository with an initial commit.', schema({}), () => 'init'],
   ['unmix_begin', 'Record task intent before editing. Declare dependencies and checks for retained behavior.', schema({ taskId: string, title: string, intent: string, dependsOn: { type: 'array', items: string }, checks: commandList }, ['taskId', 'title', 'intent']), () => 'begin'],
+  ['unmix_checkpoint', 'Record one completed chunk after editing, without begin/finish. Groups all nonignored changes since the last recorded task; title is required, ID and intent default automatically. Initialize before the first edit. Does not infer task boundaries or hidden dependencies; checks/dependsOn remain optional explicit evidence.', schema({ taskId: string, title: string, intent: string, dependsOn: { type: 'array', items: string }, checks: commandList }, ['title']), () => 'checkpoint'],
   ['unmix_finish', 'Snapshot all nonignored file changes for the active task. Original branch and index stay unchanged.', schema({}), () => 'finish'],
   ['unmix_timeline', 'Read recorded tasks, dependency declarations, checks and snapshot commit IDs.', schema({}), () => 'timeline'],
   ['unmix_preview', 'Preview a task removal using recorded dependencies, transitive paths and shared files. Read-only: no candidate, replay, checks or model call. Hidden dependencies and conflicts remain unknown. Return expectedTimeline for optional stale-preview refusal in prepare.', schema({ remove: { type: 'array', minItems: 1, items: string }, format: { ...string, enum: ['json', 'markdown'] } }, ['remove']), () => 'preview'],
@@ -58,8 +59,8 @@ export function serve(repo) {
         const supported = ['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25'];
         const requested = req.params?.protocolVersion;
         result = { protocolVersion: supported.includes(requested) ? requested : '2025-06-18', capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'unmix', version: '0.1.9' },
-          instructions: 'Use begin/finish around each task. Preview recorded removal impact before prepare; prepare creates a separate candidate; Codex adapts conflicts and verifies. Never infer that test passage proves every behavior.' };
+          serverInfo: { name: 'unmix', version: '0.2.0' },
+          instructions: 'Initialize before the first edit. Record completed chunks with checkpoint, or use begin/finish around each task. Neither infers hidden dependencies. Preview recorded removal impact before prepare; prepare creates a separate candidate; Codex adapts conflicts and verifies. Never infer that test passage proves every behavior.' };
         initialized = true;
       } else if (req.method === 'ping') result = {};
       else if (!initialized) throw Object.assign(new Error('Initialize first.'), { rpcCode: -32000 });
