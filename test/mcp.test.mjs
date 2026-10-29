@@ -35,7 +35,7 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   assert.equal(init.result.protocolVersion, '2025-06-18');
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const discovery = (await request('tools/list')).result.tools;
-  assert.equal(discovery.length, 13);
+  assert.equal(discovery.length, 14);
   assert.equal(discovery.find(t => t.name === 'unmix_report').annotations.readOnlyHint, true);
   assert.equal((await request('ping')).result.constructor, Object);
   await tool('unmix_init');
@@ -90,6 +90,11 @@ test('MCP client handshake, tool discovery, recording, reconstruction and verifi
   assert.equal((await request('tools/call', { name: 'unmix_manual_check', arguments: { ...observation, planId: passportPlan.planId, expectedTree: contextInspection.candidateTree } })).result.isError, true);
   await tool('unmix_manual_check', { ...observation, planId: passportPlan.planId, expectedTree: contextInspection.candidateTree, expectedContext: declared.revision });
   assert.equal((await request('tools/call', { name: 'unmix_manual_context', arguments: { planId: passportPlan.planId, context: { ...context, cookies: 'forbidden-field' } } })).result.isError, true);
+  fs.writeFileSync(path.join(repo, 'checkpoint.txt'), 'completed chunk');
+  const checkpoint = await tool('unmix_checkpoint', { title: 'Completed chunk' });
+  assert.equal(checkpoint.recordingMode, 'checkpoint');
+  assert.equal(checkpoint.intent, 'Completed chunk');
+  assert.equal(discovery.find(t => t.name === 'unmix_checkpoint').annotations.readOnlyHint, false);
   const invalid = await request('tools/call', { name: 'unmix_begin', arguments: { taskId: 'x', title: 'x', intent: 'x', repo: '/' } });
   assert.equal(invalid.result.isError, true);
   assert.equal((await request('tools/call', { name: 'missing' })).error.code, -32602);
