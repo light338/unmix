@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — 2026-10-29
+
+- Add post-edit checkpoint recording with title-only CLI and MCP, automatic ID
+  and default intent, preserving source/HEAD/index and existing begin/finish.
+- Add the requested undeclared runtime-input regression: clean patch replay
+  followed by an explicit failing behavioral check, never false verification.
+- Document one-call recording, honest dependency limits and measured pilot evidence.
+
 ## 0.1.9 — 2026-10-16
 
 - Add phase-specific manual context declarations for browser, environment,
